@@ -147,8 +147,8 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow6 = tf.nn.relu(flow6)
 
     flow6to5 = tf.image.resize_bilinear(flow6,
-                                        [H / (2**5), (W / (2**5))]) * 2.0
-    feature2_5w = transformer_old(feature2_5, flow6to5, [H / 32, W / 32])
+                                        [H // (2**5), (W // (2**5))]) * 2.0
+    feature2_5w = transformer_old(feature2_5, flow6to5, [H // 32, W // 32])
     cv5 = cost_volumn(feature1_5, feature2_5w, d=4)
     flow5, _ = optical_flow_decoder_dc(
         tf.concat(
@@ -160,8 +160,8 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow5 = tf.nn.relu(flow5)
 
     flow5to4 = tf.image.resize_bilinear(flow5,
-                                        [H / (2**4), (W / (2**4))]) * 2.0
-    feature2_4w = transformer_old(feature2_4, flow5to4, [H / 16, W / 16])
+                                        [H // (2**4), (W // (2**4))]) * 2.0
+    feature2_4w = transformer_old(feature2_4, flow5to4, [H // 16, W // 16])
     cv4 = cost_volumn(feature1_4, feature2_4w, d=4)
     flow4, _ = optical_flow_decoder_dc(
         tf.concat(
@@ -173,8 +173,8 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow4 = tf.nn.relu(flow4)
 
     flow4to3 = tf.image.resize_bilinear(flow4,
-                                        [H / (2**3), (W / (2**3))]) * 2.0
-    feature2_3w = transformer_old(feature2_3, flow4to3, [H / 8, W / 8])
+                                        [H // (2**3), (W // (2**3))]) * 2.0
+    feature2_3w = transformer_old(feature2_3, flow4to3, [H // 8, W // 8])
     cv3 = cost_volumn(feature1_3, feature2_3w, d=4)
     flow3, _ = optical_flow_decoder_dc(
         tf.concat(
@@ -186,8 +186,8 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow3 = tf.nn.relu(flow3)
 
     flow3to2 = tf.image.resize_bilinear(flow3,
-                                        [H / (2**2), (W / (2**2))]) * 2.0
-    feature2_2w = transformer_old(feature2_2, flow3to2, [H / 4, W / 4])
+                                        [H // (2**2), (W // (2**2))]) * 2.0
+    feature2_2w = transformer_old(feature2_2, flow3to2, [H // 4, W // 4])
     cv2 = cost_volumn(feature1_2, feature2_2w, d=4)
     flow2_raw, f2 = optical_flow_decoder_dc(
         tf.concat(
