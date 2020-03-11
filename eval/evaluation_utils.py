@@ -1,8 +1,7 @@
 import numpy as np
 import os
-import cv2, skimage
-import skimage.io
-import scipy.misc as sm
+import imgtool
+import cv2
 from flowlib import write_flow_png
 
 
@@ -40,10 +39,10 @@ def load_gt_disp_kitti(path, eval_occ):
     gt_disparities = []
     for i in range(200):
         if eval_occ:
-            disp = sm.imread(
+            disp = imgtool.imread(
                 path + "/disp_occ_0/" + str(i).zfill(6) + "_10.png", -1)
         else:
-            disp = sm.imread(
+            disp = imgtool.imread(
                 path + "/disp_noc_0/" + str(i).zfill(6) + "_10.png", -1)
         disp = disp.astype(np.float32) / 256.0
         gt_disparities.append(disp)
@@ -60,8 +59,7 @@ def convert_disps_to_depths_kitti(gt_disparities, pred_disparities):
         height, width = gt_disp.shape
 
         pred_disp = pred_disparities[i]
-        pred_disp = width * cv2.resize(
-            pred_disp, (width, height), interpolation=cv2.INTER_LINEAR)
+        pred_disp = width * cv2.resize(pred_disp, (width, height))
 
         pred_disparities_resized.append(pred_disp)
 
@@ -91,19 +89,19 @@ def write_test_results(test_result_flow_optical, test_result_disp,
         flow[:, :, 0] = flow[:, :, 0] / opt.img_width * W
         flow[:, :, 1] = flow[:, :, 1] / opt.img_height * H
 
-        flow = cv2.resize(flow, (W, H), interpolation=cv2.INTER_LINEAR)
+        flow = cv2.resize(flow, (W, H))
         write_flow_png(flow,
                        os.path.join(output_dir, mode, "flow",
                                     str(i).zfill(6) + "_10.png"))
 
-        disp0 = W * cv2.resize(disp0, (W, H), interpolation=cv2.INTER_LINEAR)
-        skimage.io.imsave(
+        disp0 = W * cv2.resize(disp0, (W, H))
+        imgtool.imsave(
             os.path.join(output_dir, mode, "disp_0",
                          str(i).zfill(6) + "_10.png"),
             (disp0 * 256).astype('uint16'))
 
-        disp1 = W * cv2.resize(disp1, (W, H), interpolation=cv2.INTER_LINEAR)
-        skimage.io.imsave(
+        disp1 = W * cv2.resize(disp1, (W, H))
+        imgtool.imsave(
             os.path.join(output_dir, mode, "disp_1",
                          str(i).zfill(6) + "_10.png"),
             (disp1 * 256).astype('uint16'))

@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.misc as sm
+import imgtool
 import cv2
 
 
@@ -19,14 +19,14 @@ def eval_disp_avg(pred_disps, path, disp_num=None, moving_masks=None):
     num = len(pred_disps)
     for i, pred_disp in enumerate(pred_disps):
         if disp_num is not None:
-            gt_disp = sm.imread(path + "/disp_occ_" + str(disp_num) + "/" +
+            gt_disp = imgtool.imread(path + "/disp_occ_" + str(disp_num) + "/" +
                                 str(i).zfill(6) + "_10.png", -1)
-            gt_disp_noc = sm.imread(path + "/disp_noc_" + str(disp_num) + "/" +
+            gt_disp_noc = imgtool.imread(path + "/disp_noc_" + str(disp_num) + "/" +
                                     str(i).zfill(6) + "_10.png", -1)
         else:
-            gt_disp = sm.imread(
+            gt_disp = imgtool.imread(
                 path + "/disp_occ/" + str(i).zfill(6) + "_10.png", -1)
-            gt_disp_noc = sm.imread(
+            gt_disp_noc = imgtool.imread(
                 path + "/disp_noc/" + str(i).zfill(6) + "_10.png", -1)
 
         gt_disp = gt_disp.astype(np.float32) / 256.0
@@ -37,8 +37,7 @@ def eval_disp_avg(pred_disps, path, disp_num=None, moving_masks=None):
 
         H, W = gt_disp.shape[0:2]
 
-        pred_disp = W * cv2.resize(
-            pred_disp, (W, H), interpolation=cv2.INTER_LINEAR)
+        pred_disp = W * cv2.resize(pred_disp, (W, H))
 
         epe_map = np.abs(pred_disp - gt_disp)
         error += np.sum(epe_map * valid_mask) / np.sum(valid_mask)

@@ -1,3 +1,10 @@
+# VICTECH trick to fix ModuleNotFound error
+import sys, os
+curdir = os.path.dirname(__file__)
+pardir = os.path.abspath(os.path.join(curdir, os.pardir))
+if pardir not in sys.path: sys.path.append(pardir)
+if curdir not in sys.path: sys.path.append(curdir)
+# VICTECH
 from evaluation_utils import *
 
 

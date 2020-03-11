@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import scipy.misc as sm
+import imgtool
 
 from eval.evaluate_depth import load_depths, eval_depth
 from eval.evaluate_flow import get_scaled_intrinsic_matrix, eval_flow_avg
@@ -46,27 +46,27 @@ def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
                 gt_dir = opt.gt_2015_dir
 
             for i in range(total_img_num):
-                img1 = sm.imread(
+                img1 = imgtool.imread(
                     os.path.join(gt_dir, "image_2",
                                  str(i).zfill(6) + "_10.png"))
                 img1_orig = img1
                 orig_H, orig_W = img1.shape[0:2]
-                img1 = sm.imresize(img1, (opt.img_height, opt.img_width))
+                img1 = imgtool.imresize(img1, (opt.img_height, opt.img_width))
 
-                img2 = sm.imread(
+                img2 = imgtool.imread(
                     os.path.join(gt_dir, "image_2",
                                  str(i).zfill(6) + "_11.png"))
-                img2 = sm.imresize(img2, (opt.img_height, opt.img_width))
+                img2 = imgtool.imresize(img2, (opt.img_height, opt.img_width))
 
-                imgr = sm.imread(
+                imgr = imgtool.imread(
                     os.path.join(gt_dir, "image_3",
                                  str(i).zfill(6) + "_10.png"))
-                imgr = sm.imresize(imgr, (opt.img_height, opt.img_width))
+                imgr = imgtool.imresize(imgr, (opt.img_height, opt.img_width))
 
-                img2r = sm.imread(
+                img2r = imgtool.imread(
                     os.path.join(gt_dir, "image_3",
                                  str(i).zfill(6) + "_11.png"))
-                img2r = sm.imresize(img2r, (opt.img_height, opt.img_width))
+                img2r = imgtool.imresize(img2r, (opt.img_height, opt.img_width))
 
                 img1 = np.expand_dims(img1, axis=0)
                 img2 = np.expand_dims(img2, axis=0)

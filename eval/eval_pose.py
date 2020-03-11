@@ -77,8 +77,8 @@ class kittiEvalOdom():
             P = np.eye(4)
             line_split = [float(i) for i in line.split(" ")]
             withIdx = int(len(line_split) == 13)
-            for row in xrange(3):
-                for col in xrange(4):
+            for row in range(3):
+                for col in range(4):
                     P[row, col] = line_split[row * 4 + col + withIdx]
             if withIdx:
                 frame_idx = line_split[0]
@@ -93,7 +93,7 @@ class kittiEvalOdom():
         # ----------------------------------------------------------------------
         dist = [0]
         sort_frame_idx = sorted(poses.keys())
-        for i in xrange(len(sort_frame_idx) - 1):
+        for i in range(len(sort_frame_idx) - 1):
             cur_frame_idx = sort_frame_idx[i]
             next_frame_idx = sort_frame_idx[i + 1]
             P1 = poses[cur_frame_idx]
@@ -118,7 +118,7 @@ class kittiEvalOdom():
         return np.sqrt(dx**2 + dy**2 + dz**2)
 
     def lastFrameFromSegmentLength(self, dist, first_frame, len_):
-        for i in xrange(first_frame, len(dist), 1):
+        for i in range(first_frame, len(dist), 1):
             if dist[i] > (dist[first_frame] + len_):
                 return i
         return -1
@@ -128,8 +128,8 @@ class kittiEvalOdom():
         dist = self.trajectoryDistances(poses_gt)
         self.step_size = 10
 
-        for first_frame in xrange(9, len(poses_gt), self.step_size):
-            for i in xrange(self.num_lengths):
+        for first_frame in range(9, len(poses_gt), self.step_size):
+            for i in range(self.num_lengths):
                 len_ = self.lengths[i]
                 last_frame = self.lastFrameFromSegmentLength(dist, first_frame,
                                                              len_)

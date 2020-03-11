@@ -3,7 +3,7 @@
 
 import math, re, os
 import numpy as np
-import scipy.misc as sm
+import imgtool
 from evaluate_flow import get_scaled_intrinsic_matrix
 
 from tensorflow.python.platform import flags
@@ -49,24 +49,24 @@ def pred_pose(eval_model, opt, sess, seqs):
         test_result_pose_mat = [np.reshape(curr_pose_mat[0:3, 0:4], [1, -1])]
 
         for i in range(frame_start, frame_end):
-            img1 = sm.imread(root_img_path + str(i).zfill(10) + ".png")
-            img2 = sm.imread(root_img_path + str(i + 1).zfill(10) + ".png")
-            imgr = sm.imread(
+            img1 = imgtool.imread(root_img_path + str(i).zfill(10) + ".png")
+            img2 = imgtool.imread(root_img_path + str(i + 1).zfill(10) + ".png")
+            imgr = imgtool.imread(
                 re.sub('image_02', 'image_03', root_img_path + str(i).zfill(10)
                        + ".png"))
-            img2r = sm.imread(
+            img2r = imgtool.imread(
                 re.sub('image_02', 'image_03', root_img_path + str(i + 1)
                        .zfill(10) + ".png"))
 
             orig_H, orig_W = img1.shape[0:2]
-            img1 = sm.imresize(img1, (opt.img_height, opt.img_width))
+            img1 = imgtool.imresize(img1, (opt.img_height, opt.img_width))
             img1 = np.expand_dims(img1, axis=0)
-            img2 = sm.imresize(img2, (opt.img_height, opt.img_width))
+            img2 = imgtool.imresize(img2, (opt.img_height, opt.img_width))
             img2 = np.expand_dims(img2, axis=0)
 
-            imgr = sm.imresize(imgr, (opt.img_height, opt.img_width))
+            imgr = imgtool.imresize(imgr, (opt.img_height, opt.img_width))
             imgr = np.expand_dims(imgr, axis=0)
-            img2r = sm.imresize(img2r, (opt.img_height, opt.img_width))
+            img2r = imgtool.imresize(img2r, (opt.img_height, opt.img_width))
             img2r = np.expand_dims(img2r, axis=0)
 
             calib_file = opt.data_dir + "/" + date + "/calib_cam_to_cam.txt"

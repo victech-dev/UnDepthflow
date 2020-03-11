@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from flowlib import read_flow_png, flow_to_image
-import scipy.misc as sm
+import imgtool
 import cv2
 import multiprocessing
 import functools
@@ -118,21 +118,20 @@ def eval_flow_avg(gt_flows,
         pred_flow[:, :, 1] = pred_flow[:, :, 1] / opt.img_height * H
 
         #flo_pred = sm.imresize(pred_flow, (H, W), interp="bilinear", mode='F')
-        flo_pred = cv2.resize(
-            pred_flow, (W, H), interpolation=cv2.INTER_LINEAR)
+        flo_pred = cv2.resize(pred_flow, (W, H))
         if not os.path.exists(os.path.join(opt.trace, "pred_flow")):
             os.mkdir(os.path.join(opt.trace, "pred_flow"))
 
         if write_img:
-            sm.imsave(
+            imgtool.imsave(
                 os.path.join(opt.trace, "pred_flow",
                              str(i).zfill(6) + "_10.png"),
                 flow_to_image(flo_pred))
-            sm.imsave(
+            imgtool.imsave(
                 os.path.join(opt.trace, "pred_flow",
                              str(i).zfill(6) + "_10_gt.png"),
                 flow_to_image(gt_flow[:, :, 0:2]))
-            sm.imsave(
+            imgtool.imsave(
                 os.path.join(opt.trace, "pred_flow",
                              str(i).zfill(6) + "_10_err.png"),
                 flow_to_image(

@@ -75,15 +75,28 @@ flags.DEFINE_float("flow_diff_threshold", 4.0,
 
 flags.DEFINE_string('eval_pose', '', 'pose seq to evaluate')
 
-FLAGS.num_scales = 4
+flags.DEFINE_integer("num_scales", 4, "Number of scales: 1/2^0, 1/2^1, ..., 1/2^(n-1)") #FLAGS.num_scales = 4
+flags.DEFINE_boolean('eval_flow', False, '')
+flags.DEFINE_boolean('eval_depth', False, '')
+flags.DEFINE_boolean('eval_mask', False, '')
 opt = FLAGS
 
-
 def main(unused_argv):
+    #VICTECH stereo train
+    FLAGS.data_dir = '/media/data/datasets/kitti_data/kitti_raw_data/'
+    FLAGS.mode = 'stereo'
+    FLAGS.train_test = 'train'
+    FLAGS.retrain = True
+    FLAGS.train_file = './filenames/kitti_train_files_png_4frames.txt'
+    FLAGS.gt_2012_dir = '/media/data/datasets/kitti_data/kitti_stereo_2012/'
+    FLAGS.gt_2015_dir = '/media/data/datasets/kitti_data/kitti_stereo_2015/'
+    FLAGS.trace = './results'
+    #VICTECH
+
     if FLAGS.trace == "":
         raise Exception("OUT_DIR must be specified")
 
-    print 'Constructing models and inputs.'
+    print('Constructing models and inputs.')
 
     if FLAGS.mode == "depthflow":  # stage 3: train depth and flow together
         Model = Model_depthflow
@@ -142,7 +155,7 @@ def main(unused_argv):
                                           tf.get_variable_scope().name)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
-            for i in xrange(FLAGS.num_gpus):
+            for i in range(FLAGS.num_gpus):
                 with tf.device('/gpu:%d' % i):
                     if i == FLAGS.num_gpus - 1:
                         scopename = "model"
@@ -225,8 +238,11 @@ def main(unused_argv):
         summary_op = tf.summary.merge(summaries + summaries_cpu)
 
         # Make training session.
-        sess = tf.Session(config=tf.ConfigProto(
-            allow_soft_placement=True, log_device_placement=False))
+        config = tf.ConfigProto()
+        config.allow_soft_placement = True
+        config.log_device_placement = False
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
 
         summary_writer = tf.summary.FileWriter(
             FLAGS.trace, graph=sess.graph, flush_secs=10)
@@ -286,10 +302,11 @@ def main(unused_argv):
                 if (itr) % (SAVE_INTERVAL) == 2:
                     saver.save(
                         sess, FLAGS.trace + '/model', global_step=global_step)
-
-            if (itr) % (VAL_INTERVAL) == 2 or FLAGS.train_test == "test":
-                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-                     gt_flows_2015, noc_masks_2015, gt_masks)
+            # VICTECH no test
+            print('*** Iteration done:', itr)
+            # if (itr) % (VAL_INTERVAL) == 2 or FLAGS.train_test == "test":
+            #     test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
+            #          gt_flows_2015, noc_masks_2015, gt_masks)
 
 
 if __name__ == '__main__':

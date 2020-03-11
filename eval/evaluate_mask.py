@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import scipy.misc as sm
+import imgtool
 import cv2
 import matplotlib.pyplot as plt
 import multiprocessing
@@ -197,7 +197,7 @@ def check_size(eval_segm, gt_segm):
 
 
 def read_mask_gt_worker(i):
-    return sm.imread(
+    return imgtool.imread(
         FLAGS.gt_2015_dir + "/obj_map/" + str(i).zfill(6) + "_10.png", -1)
 
 
@@ -227,17 +227,16 @@ def eval_mask(pred_masks, gt_masks, opt):
         gt_mask = gt_masks[i]
         H, W = gt_mask.shape[0:2]
 
-        pred_mask = cv2.resize(
-            pred_masks[i], (W, H), interpolation=cv2.INTER_LINEAR)
+        pred_mask = cv2.resize(pred_masks[i], (W, H))
 
         pred_mask[pred_mask >= 0.5] = 1.0
         pred_mask[pred_mask < 0.5] = 0.0
 
-        sm.imsave(
+        imgtool.imsave(
             os.path.join(opt.trace, "pred_mask",
                          str(i).zfill(6) + "_10_plot.png"),
             grey_cmap(pred_mask))
-        sm.imsave(
+        imgtool.imsave(
             os.path.join(opt.trace, "pred_mask", str(i).zfill(6) + "_10.png"),
             pred_mask)
 
