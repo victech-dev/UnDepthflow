@@ -511,7 +511,7 @@ class Model_depthflow(object):
                     tf.ones(
                         shape=[batch_size, H // (2**s), W // (2**s), 1],
                         dtype='float32'),
-                    flowr, [H / (2**s), W / (2**s)]),
+                    flowr, [H // (2**s), W // (2**s)]),
                 clip_value_min=0.0,
                 clip_value_max=1.0)
             for s, flowr in enumerate(optical_flows_rev)
