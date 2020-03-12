@@ -30,7 +30,7 @@ from test import test
 SUMMARY_INTERVAL = 100
 
 # How often to run a batch through the validation model.
-VAL_INTERVAL = 2500
+VAL_INTERVAL = 10000 # 2500
 
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
@@ -82,14 +82,13 @@ flags.DEFINE_boolean('eval_mask', False, '')
 opt = FLAGS
 
 def main(unused_argv):
+    from datafind import kitti_data_find
     #VICTECH stereo train
-    FLAGS.data_dir = '/media/data/datasets/kitti_data/kitti_raw_data/'
+    kitti_data_find()
     FLAGS.mode = 'stereo'
     FLAGS.train_test = 'train'
     FLAGS.retrain = True
     FLAGS.train_file = './filenames/kitti_train_files_png_4frames.txt'
-    FLAGS.gt_2012_dir = '/media/data/datasets/kitti_data/kitti_stereo_2012/'
-    FLAGS.gt_2015_dir = '/media/data/datasets/kitti_data/kitti_stereo_2015/'
     FLAGS.trace = './results'
     #VICTECH
 
@@ -302,11 +301,11 @@ def main(unused_argv):
                 if (itr) % (SAVE_INTERVAL) == 2:
                     saver.save(
                         sess, FLAGS.trace + '/model', global_step=global_step)
-            # VICTECH no test
+
             print('*** Iteration done:', itr)
-            # if (itr) % (VAL_INTERVAL) == 2 or FLAGS.train_test == "test":
-            #     test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-            #          gt_flows_2015, noc_masks_2015, gt_masks)
+            if (itr) % (VAL_INTERVAL) == 2 or FLAGS.train_test == "test":
+                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
+                     gt_flows_2015, noc_masks_2015, gt_masks)
 
 
 if __name__ == '__main__':

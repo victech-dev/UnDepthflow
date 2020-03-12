@@ -15,10 +15,6 @@ from __future__ import absolute_import, division, print_function
 import tensorflow as tf
 
 
-def string_length_tf(t):
-    return tf.py_func(len, [t], [tf.int64])
-
-
 def rescale_intrinsics(raw_cam_mat, opt, orig_height, orig_width):
     fx = raw_cam_mat[0, 0]
     fy = raw_cam_mat[1, 1]
@@ -247,8 +243,7 @@ class MonodepthDataloader(object):
 
     def read_image(self, image_path, get_shape=False):
         # tf.decode_image does not return the image size, this is an ugly workaround to handle both jpeg and png
-        path_length = string_length_tf(image_path)[0]
-        file_extension = tf.substr(image_path, path_length - 3, 3)
+        file_extension = tf.strings.substr(image_path, -3, 3)
         file_cond = tf.equal(file_extension, 'jpg')
 
         image = tf.cond(

@@ -41,30 +41,32 @@ def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
             if eval_data == "kitti_2012":
                 total_img_num = 194
                 gt_dir = opt.gt_2012_dir
+                img1_dir, img2_dir, calib_dir = "colored_0", "colored_1", 'calib'
             else:
                 total_img_num = 200
-                gt_dir = opt.gt_2015_dir
+                gt_dir = opt.gt_2015_dir 
+                img1_dir, img2_dir, calib_dir = "image_2", "image_3", 'calib_cam_to_cam'
 
             for i in range(total_img_num):
                 img1 = imgtool.imread(
-                    os.path.join(gt_dir, "image_2",
+                    os.path.join(gt_dir, img1_dir,
                                  str(i).zfill(6) + "_10.png"))
                 img1_orig = img1
                 orig_H, orig_W = img1.shape[0:2]
                 img1 = imgtool.imresize(img1, (opt.img_height, opt.img_width))
 
                 img2 = imgtool.imread(
-                    os.path.join(gt_dir, "image_2",
+                    os.path.join(gt_dir, img1_dir,
                                  str(i).zfill(6) + "_11.png"))
                 img2 = imgtool.imresize(img2, (opt.img_height, opt.img_width))
 
                 imgr = imgtool.imread(
-                    os.path.join(gt_dir, "image_3",
+                    os.path.join(gt_dir, img2_dir,
                                  str(i).zfill(6) + "_10.png"))
                 imgr = imgtool.imresize(imgr, (opt.img_height, opt.img_width))
 
                 img2r = imgtool.imread(
-                    os.path.join(gt_dir, "image_3",
+                    os.path.join(gt_dir, img2_dir,
                                  str(i).zfill(6) + "_11.png"))
                 img2r = imgtool.imresize(img2r, (opt.img_height, opt.img_width))
 
@@ -73,7 +75,7 @@ def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
                 imgr = np.expand_dims(imgr, axis=0)
                 img2r = np.expand_dims(img2r, axis=0)
 
-                calib_file = os.path.join(gt_dir, "calib_cam_to_cam",
+                calib_file = os.path.join(gt_dir, calib_dir,
                                           str(i).zfill(6) + ".txt")
 
                 input_intrinsic = get_scaled_intrinsic_matrix(
