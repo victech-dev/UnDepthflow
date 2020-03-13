@@ -106,6 +106,25 @@ def create_axis_bar():
             bar.append(b)
     return bar
 
+def count_weights():
+    var_pose = list(set(tf.get_collection(
+        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*pose_net.*")))
+    var_depth = list(set(tf.get_collection(
+        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(depth_net|feature_net_disp).*")))
+    var_flow = list(set(tf.get_collection(
+        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(flow_net|feature_net_flow).*")))
+    if FLAGS.mode == "depthflow":
+        var_train_list = var_pose + var_depth + var_flow
+    elif FLAGS.mode == "depth":
+        var_train_list = var_pose + var_depth
+    elif FLAGS.mode == "flow":
+        var_train_list = var_flow
+    else:
+        var_train_list = var_depth
+    sizes = [np.prod(v.shape.as_list()) for v in var_train_list]
+    print("*** Total weight count:", np.sum(sizes))
+
+
 def main(unused_argv):
     from datafind import kitti_data_find
     #VICTECH stereo test
@@ -159,6 +178,7 @@ def main(unused_argv):
             with tf.name_scope("model") as ns:
                 model = Model(image1, image2, image1r, image2r, 
                     cam2pix, pix2cam, reuse_scope=False, scope=vs)
+                count_weights()
                 eval_model = Model_eval(scope=vs)
 
         # Create a saver.
