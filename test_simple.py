@@ -89,6 +89,23 @@ def predict_depth_single_gt_2015(sess, eval_model, i):
     # print("**** 1000 elapsed:", time1 - time0)
     return img1, depth, K
 
+def create_axis_bar():
+    LEN, DIV, RADIUS = 20, 1, 0.2
+    color = np.eye(3)
+    rot = [o3d.geometry.get_rotation_matrix_from_xyz([0,0.5*np.pi,0]), 
+        o3d.geometry.get_rotation_matrix_from_xyz([-0.5*np.pi,0,0]), 
+        np.eye(3)]
+    bar = []
+    for c,r in zip(color, rot):
+        color_blend = False
+        for pos in np.arange(0, LEN, DIV):
+            b = o3d.geometry.TriangleMesh.create_cylinder(radius=RADIUS, height=DIV)
+            b.paint_uniform_color(c*0.5 + 0.5 if color_blend else c); color_blend = not color_blend
+            b.translate([0,0,pos + DIV/2])
+            b.rotate(r, center=False)
+            bar.append(b)
+    return bar
+
 def main(unused_argv):
     from datafind import kitti_data_find
     #VICTECH stereo test
@@ -174,6 +191,7 @@ def main(unused_argv):
         # cv2.destroyAllWindows()
 
         # point cloud test of KITTI 2015 gt
+        axis_bar = create_axis_bar()
         for i in range(200):
             img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
             py, px = np.mgrid[:img.shape[0],:img.shape[1]]
@@ -181,9 +199,12 @@ def main(unused_argv):
             xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
             xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
             rgb = np.reshape(img, (-1, 3)) / 255.0
-            np.savetxt('./scene.txt', np.hstack([xyz.astype(np.float32), rgb.astype(np.float32)]))
-            pcd = o3d.io.read_point_cloud("./scene.txt", format='xyzrgb')
-            o3d.visualization.draw_geometries([pcd])
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(xyz)
+            pcd.colors = o3d.utility.Vector3dVector(rgb)
+            # np.savetxt('./scene.txt', np.hstack([xyz.astype(np.float32), rgb.astype(np.float32)]))
+            # pcd = o3d.io.read_point_cloud("./scene.txt", format='xyzrgb')
+            o3d.visualization.draw_geometries([pcd] + axis_bar)
 
 
 if __name__ == '__main__':
