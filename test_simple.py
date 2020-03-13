@@ -89,8 +89,17 @@ def predict_depth_single_gt_2015(sess, eval_model, i):
     # print("**** 1000 elapsed:", time1 - time0)
     return img1, depth, K
 
+def predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR):
+    imgL = imgtool.imread(imgnameL)
+    imgR = imgtool.imread(imgnameR)
+    K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
+    K = np.array(K).reshape(3,3)
+    fxb = 9.0534353956364146e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
+    depth = predict_depth_single(sess, eval_model, imgL, imgR, K, fxb)
+    return imgL, depth, K
+
 def create_axis_bar():
-    LEN, DIV, RADIUS = 20, 1, 0.2
+    LEN, DIV, RADIUS = 20, 1, 0.02
     color = np.eye(3)
     rot = [o3d.geometry.get_rotation_matrix_from_xyz([0,0.5*np.pi,0]), 
         o3d.geometry.get_rotation_matrix_from_xyz([-0.5*np.pi,0,0]), 
@@ -123,6 +132,24 @@ def count_weights():
         var_train_list = var_depth
     sizes = [np.prod(v.shape.as_list()) for v in var_train_list]
     print("*** Total weight count:", np.sum(sizes))
+
+def show_pcd(img, depth, K):
+    if hasattr(show_pcd, 'axisbar'):
+        axisbar = getattr(show_pcd, 'axisbar')
+    else:
+        axisbar = create_axis_bar()
+        setattr(show_pcd, 'axisbar', axisbar)
+    py, px = np.mgrid[:img.shape[0],:img.shape[1]]
+    depth = np.clip(depth, 0, 100) # some clipping required here
+    xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
+    xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
+    rgb = np.reshape(img, (-1, 3)) / 255.0
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(xyz)
+    pcd.colors = o3d.utility.Vector3dVector(rgb)
+    # np.savetxt('./scene.txt', np.hstack([xyz.astype(np.float32), rgb.astype(np.float32)]))
+    # pcd = o3d.io.read_point_cloud("./scene.txt", format='xyzrgb')
+    o3d.visualization.draw_geometries([pcd] + axisbar)
 
 
 def main(unused_argv):
@@ -210,21 +237,19 @@ def main(unused_argv):
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
 
-        # point cloud test of KITTI 2015 gt
-        axis_bar = create_axis_bar()
-        for i in range(200):
-            img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
-            py, px = np.mgrid[:img.shape[0],:img.shape[1]]
-            depth = np.clip(depth, 0, 100) # some clipping required here
-            xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
-            xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
-            rgb = np.reshape(img, (-1, 3)) / 255.0
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(xyz)
-            pcd.colors = o3d.utility.Vector3dVector(rgb)
-            # np.savetxt('./scene.txt', np.hstack([xyz.astype(np.float32), rgb.astype(np.float32)]))
-            # pcd = o3d.io.read_point_cloud("./scene.txt", format='xyzrgb')
-            o3d.visualization.draw_geometries([pcd] + axis_bar)
+        # # point cloud test of KITTI 2015 gt
+        # axis_bar = create_axis_bar()
+        # for i in range(200):
+        #     img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
+        #     show_pcd(img, depth, K)
+
+        # point cloud test of office image
+        data_dir = 'M:\\Users\\sehee\\StereoCalibrationExample_200313_1658'
+        imgnameL = os.path.join(data_dir, 'photo04_L.jpg')
+        imgnameR = os.path.join(data_dir, 'photo04_R.jpg')
+        img, depth, K = predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR)
+        depth = np.clip(depth, 0, 20)
+        show_pcd(img, depth, K)
 
 
 if __name__ == '__main__':
