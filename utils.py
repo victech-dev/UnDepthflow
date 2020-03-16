@@ -190,7 +190,7 @@ def inverse_warp(depth,
         pose_mat = _pose_vec2mat(pose)
 
     if pose_mat_inverse:
-        pose_mat = tf.matrix_inverse(pose_mat)
+        pose_mat = tf.linalg.inv(pose_mat)
 
     # Get projection matrix for tgt camera frame to source pixel frame
     hom_filler = tf.constant([0.0, 0.0, 0.0, 1.0], shape=[1, 1, 4])
@@ -427,7 +427,7 @@ def inverse_warp_new(depth1,
         pose_mat = _pose_vec2mat(pose)
 
     if pose_mat_inverse:
-        pose_mat = tf.matrix_inverse(pose_mat)
+        pose_mat = tf.linalg.inv(pose_mat)
     # Point Cloud \hat{Q_1}
     cam_coords1_trans = tf.matmul(pose_mat, cam_coords1_hom)[:, 0:3, :]
 

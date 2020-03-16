@@ -179,10 +179,10 @@ def main(unused_argv):
     from datafind import kitti_data_find
     #VICTECH stereo test
     kitti_data_find()
-    # FLAGS.mode = 'stereo'
-    # FLAGS.pretrained_model = './stereo_results/model-297503'
-    FLAGS.mode = 'depthflow'
-    FLAGS.pretrained_model = './depthflow_results/model-297503'
+    FLAGS.mode = 'stereo'
+    FLAGS.pretrained_model = './stereo_results/model-297503'
+    # FLAGS.mode = 'depthflow'
+    # FLAGS.pretrained_model = './depthflow_results/model-297503'
     #VICTECH
 
     print('Constructing models and inputs.')

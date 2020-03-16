@@ -42,7 +42,7 @@ def get_multi_scale_intrinsics(raw_cam_mat, num_scales):
         r3 = tf.constant([0., 0., 1.])
         proj_cam2pix.append(tf.stack([r1, r2, r3]))
     proj_cam2pix = tf.stack(proj_cam2pix)
-    proj_pix2cam = tf.matrix_inverse(proj_cam2pix)
+    proj_pix2cam = tf.linalg.inv(proj_cam2pix)
     proj_cam2pix.set_shape([num_scales, 3, 3])
     proj_pix2cam.set_shape([num_scales, 3, 3])
     return proj_cam2pix, proj_pix2cam
