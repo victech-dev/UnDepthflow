@@ -51,22 +51,26 @@ flags.DEFINE_boolean('eval_depth', False, '')
 flags.DEFINE_boolean('eval_mask', False, '')
 opt = FLAGS
 
-def predict_depth_single(sess, eval_model, image1, image1r, K, fxb):
+def predict_depth_single(sess, eval_model, image1, image2, image1r, image2r, K, fxb):
     height, width = image1.shape[:2] # original height, width
     # fit to model input
     img1 = imgtool.imresize(image1, (opt.img_height, opt.img_width))
+    img2 = imgtool.imresize(image2, (opt.img_height, opt.img_width))
     img1r = imgtool.imresize(image1r, (opt.img_height, opt.img_width))
+    img2r = imgtool.imresize(image2r, (opt.img_height, opt.img_width))
     # prepend batch dimension
     img1 = np.expand_dims(img1, axis=0)
+    img2 = np.expand_dims(img2, axis=0)
     img1r = np.expand_dims(img1r, axis=0)
+    img2r = np.expand_dims(img2r, axis=0)
     # zoom K
     K = scale_intrinsics(K, opt.img_width / width, opt.img_height / height)
     # session run
     pred_disp, _ = sess.run(
         [eval_model.pred_disp, eval_model.pred_mask],
         feed_dict = {
-            eval_model.input_1: img1, eval_model.input_2: img1,
-            eval_model.input_r: img1r, eval_model.input_2r: img1r, 
+            eval_model.input_1: img1, eval_model.input_2: img2,
+            eval_model.input_r: img1r, eval_model.input_2r: img2r, 
             eval_model.input_intrinsic: K})
     # depth from disparity
     pred_disp = np.squeeze(pred_disp)
@@ -77,10 +81,12 @@ def predict_depth_single(sess, eval_model, image1, image1r, K, fxb):
 def predict_depth_single_gt_2015(sess, eval_model, i):
     gt_dir = opt.gt_2015_dir
     img1 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_10.png"))
+    img2 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_11.png"))
     img1r = imgtool.imread(os.path.join(gt_dir, "image_3", str(i).zfill(6) + "_10.png"))
+    img2r = imgtool.imread(os.path.join(gt_dir, "image_3", str(i).zfill(6) + "_11.png"))
     K = get_scaled_intrinsic_matrix(os.path.join(gt_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
     fxb = width_to_focal[img1.shape[1]] * 0.54
-    depth = predict_depth_single(sess, eval_model, img1, img1r, K, fxb)
+    depth = predict_depth_single(sess, eval_model, img1, img2, img1r, img2r, K, fxb)
     # import time
     # time0 = time.time()
     # for _ in range(1000):
@@ -94,7 +100,7 @@ def predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR):
     imgR = imgtool.imread(imgnameR)
     K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
     K = np.array(K).reshape(3,3)
-    fxb = 9.0534353956364146e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
+    fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
     depth = predict_depth_single(sess, eval_model, imgL, imgR, K, fxb)
     return imgL, depth, K
 
@@ -156,8 +162,10 @@ def main(unused_argv):
     from datafind import kitti_data_find
     #VICTECH stereo test
     kitti_data_find()
-    FLAGS.mode = 'stereo'
-    FLAGS.pretrained_model = './stereo_results/model-297503'
+    # FLAGS.mode = 'stereo'
+    # FLAGS.pretrained_model = './stereo_results/model-297503'
+    FLAGS.mode = 'depthflow'
+    FLAGS.pretrained_model = './depthflow_results/model-297503'
     #VICTECH
 
     print('Constructing models and inputs.')
@@ -166,9 +174,9 @@ def main(unused_argv):
         Model = Model_depthflow
         Model_eval = Model_eval_depthflow
 
-        opt.eval_flow = True
+        opt.eval_flow = False # True
         opt.eval_depth = True
-        opt.eval_mask = True
+        opt.eval_mask = False # True
     elif FLAGS.mode == "depth":  # stage 2: train depth
         Model = Model_depth
         Model_eval = Model_eval_depth
@@ -219,15 +227,14 @@ def main(unused_argv):
         sess.run(tf.local_variables_initializer())
         saver.restore(sess, FLAGS.pretrained_model)
 
-        if opt.eval_flow:
-            gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
-            gt_flows_2015, noc_masks_2015 = load_gt_flow_kitti("kitti")
-            gt_masks = load_gt_mask()
-        else:
-            gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks = \
-              None, None, None, None, None
-
         # # evaluate KITTI gt 2012/2015
+        # if opt.eval_flow:
+        #     gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
+        #     gt_flows_2015, noc_masks_2015 = load_gt_flow_kitti("kitti")
+        #     gt_masks = load_gt_mask()
+        # else:
+        #     gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks = \
+        #       None, None, None, None, None
         # test(sess, eval_model, 0, gt_flows_2012, noc_masks_2012,
         #         gt_flows_2015, noc_masks_2015, gt_masks)
 
@@ -238,18 +245,17 @@ def main(unused_argv):
         # cv2.destroyAllWindows()
 
         # # point cloud test of KITTI 2015 gt
-        # axis_bar = create_axis_bar()
-        # for i in range(200):
-        #     img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
-        #     show_pcd(img, depth, K)
+        for i in range(200):
+            img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
+            show_pcd(img, depth, K)
 
-        # point cloud test of office image
-        data_dir = 'M:\\Users\\sehee\\StereoCalibrationExample_200313_1658'
-        imgnameL = os.path.join(data_dir, 'photo04_L.jpg')
-        imgnameR = os.path.join(data_dir, 'photo04_R.jpg')
-        img, depth, K = predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR)
-        depth = np.clip(depth, 0, 20)
-        show_pcd(img, depth, K)
+        # # point cloud test of office image
+        # data_dir = 'M:\\Users\\sehee\\StereoCalibrationExample_200313_1658'
+        # imgnameL = os.path.join(data_dir, 'photo04_L.jpg')
+        # imgnameR = os.path.join(data_dir, 'photo04_R.jpg')
+        # img, depth, K = predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR)
+        # depth = np.clip(depth, 0, 20)
+        # show_pcd(img, depth, K)
 
 
 if __name__ == '__main__':
