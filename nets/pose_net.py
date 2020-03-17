@@ -1,6 +1,8 @@
 from __future__ import division
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from tensorflow.python.platform import flags
+opt = flags.FLAGS
 """
 Adopted from https://github.com/tinghuiz/SfMLearner
 """
@@ -13,7 +15,7 @@ def pose_exp_net(tgt_image, src_image):
         with slim.arg_scope(
             [slim.conv2d, slim.conv2d_transpose],
                 normalizer_fn=None,
-                weights_regularizer=slim.l2_regularizer(0.0004),
+                weights_regularizer=slim.l2_regularizer(opt.weight_decay),
                 activation_fn=tf.nn.relu,
                 outputs_collections=end_points_collection):
             cnv1 = slim.conv2d(inputs, 16, [7, 7], stride=2, scope='cnv1')

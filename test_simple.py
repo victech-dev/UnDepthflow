@@ -39,6 +39,8 @@ flags.DEFINE_string('gt_2015_dir', '',
 flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
 
+flags.DEFINE_float('weight_decay', 0.0, 'scale of l2 regularization')
+
 flags.DEFINE_float("depth_smooth_weight", 10.0, "Weight for depth smoothness")
 flags.DEFINE_float("ssim_weight", 0.85,
                    "Weight for using ssim loss in pixel loss")
@@ -107,7 +109,7 @@ def predict_depth_single_gt_2015(sess, eval_model, i):
     # import time
     # time0 = time.time()
     # for _ in range(1000):
-    #     predict_depth_single(sess, eval_model, img1, img1r, K, fxb)
+    #     predict_depth_single(sess, eval_model, img1, img2, img1r, img2r, K, fxb)
     # time1 = time.time()
     # print("**** 1000 elapsed:", time1 - time0)
     return img1, depth, K
@@ -118,7 +120,7 @@ def predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR):
     K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
     K = np.array(K).reshape(3,3)
     fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
-    depth = predict_depth_single(sess, eval_model, imgL, imgR, K, fxb)
+    depth = predict_depth_single(sess, eval_model, imgL, imgL, imgR, imgR, K, fxb)
     return imgL, depth, K
 
 def create_axis_bar():

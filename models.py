@@ -50,13 +50,14 @@ class Model_stereo(object):
         summaries.append(
             tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
 
-        tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
-        s = 0
-        tf.summary.image('scale%d_depth_image' % s,
-                         pred_depth[s][:, :, :, 0:1])
-        tf.summary.image('scale%d_right_disparity_image' % s,
-                         pred_disp[s][:, :, :, 1:2])
-        #     
+        # VICTECH disable this for training performance
+        # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
+        # s = 0
+        # tf.summary.image('scale%d_depth_image' % s,
+        #                  pred_depth[s][:, :, :, 0:1])
+        # tf.summary.image('scale%d_right_disparity_image' % s,
+        #                  pred_disp[s][:, :, :, 1:2])
+
         self.summ_op = tf.summary.merge(summaries)
 
 
@@ -201,15 +202,16 @@ class Model_flow(object):
         summaries.append(
             tf.summary.scalar("pixel_loss_optical", pixel_loss_optical))
         summaries.append(tf.summary.scalar("exp_loss", exp_loss))
-        tf.summary.image('scale%d_target_image' % s, \
-                         deprocess_image(tgt_image_all[s]))
-        tf.summary.image('scale%d_src_image' % s, \
-                         deprocess_image(src_image_all[s]))
+        # VICTECH disable this for training performance
+        # tf.summary.image('scale%d_target_image' % s, \
+        #                  deprocess_image(tgt_image_all[s]))
+        # tf.summary.image('scale%d_src_image' % s, \
+        #                  deprocess_image(src_image_all[s]))
 
-        tf.summary.image('scale_projected_image',
-                         deprocess_image(proj_image_depth_all[s]))
-        tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
-        tf.summary.image('scale_flyout_mask', flyout_map_all[s])
+        # tf.summary.image('scale_projected_image',
+        #                  deprocess_image(proj_image_depth_all[s]))
+        # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
+        # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
 
         self.summ_op = tf.summary.merge(summaries)
 
@@ -302,7 +304,7 @@ class Model_depth(object):
                     tf.ones(
                         shape=[batch_size, H // (2**s), W // (2**s), 1],
                         dtype='float32'),
-                    flowr, [H / (2**s), W / (2**s)]),
+                    flowr, [H // (2**s), W // (2**s)]),
                 clip_value_min=0.0,
                 clip_value_max=1.0)
             for s, flowr in enumerate(optical_flows_rev)
@@ -370,24 +372,25 @@ class Model_depth(object):
         summaries.append(
             tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
 
-        tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
-        # for s in range(opt.num_scales):
-        s = 0
-        tf.summary.histogram("pose_0-2", pred_poses[:, 0:3])
-        tf.summary.histogram("pose_3-5", pred_poses[:, 3:6])
-        tf.summary.image('scale%d_depth_image' % s,
-                         pred_depth[s][:, :, :, 0:1])
-        tf.summary.image('scale%d_right_disparity_image' % s,
-                         pred_disp[s][:, :, :, 1:2])
-        tf.summary.image('scale%d_target_image' % s, \
-                         deprocess_image(tgt_image_all[s]))
-        tf.summary.image('scale%d_src_image' % s, \
-                         deprocess_image(src_image_all[s]))
+        # VICTECH disable this for training performance
+        # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
+        # # for s in range(opt.num_scales):
+        # s = 0
+        # tf.summary.histogram("pose_0-2", pred_poses[:, 0:3])
+        # tf.summary.histogram("pose_3-5", pred_poses[:, 3:6])
+        # tf.summary.image('scale%d_depth_image' % s,
+        #                  pred_depth[s][:, :, :, 0:1])
+        # tf.summary.image('scale%d_right_disparity_image' % s,
+        #                  pred_disp[s][:, :, :, 1:2])
+        # tf.summary.image('scale%d_target_image' % s, \
+        #                  deprocess_image(tgt_image_all[s]))
+        # tf.summary.image('scale%d_src_image' % s, \
+        #                  deprocess_image(src_image_all[s]))
 
-        tf.summary.image('scale_projected_image',
-                         deprocess_image(proj_image_depth_all[s]))
-        tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
-        tf.summary.image('scale_flyout_mask', flyout_map_all[s])
+        # tf.summary.image('scale_projected_image',
+        #                  deprocess_image(proj_image_depth_all[s]))
+        # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
+        # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
         self.summ_op = tf.summary.merge(summaries)
 
 
@@ -638,23 +641,24 @@ class Model_depthflow(object):
         summaries.append(
             tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
 
-        tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
-        s = 0
-        tf.summary.histogram("pose_0-2", pred_poses[:, 0:3])
-        tf.summary.histogram("pose_3-5", pred_poses[:, 3:6])
-        tf.summary.image('scale%d_depth_image' % s,
-                         pred_depth[s][:, :, :, 0:1])
-        tf.summary.image('scale%d_right_disparity_image' % s,
-                         pred_disp[s][:, :, :, 1:2])
-        tf.summary.image('scale%d_target_image' % s, \
-                         deprocess_image(tgt_image_all[s]))
-        tf.summary.image('scale%d_src_image' % s, \
-                         deprocess_image(src_image_all[s]))
+        # VICTECH disable this for training performance
+        # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
+        # s = 0
+        # tf.summary.histogram("pose_0-2", pred_poses[:, 0:3])
+        # tf.summary.histogram("pose_3-5", pred_poses[:, 3:6])
+        # tf.summary.image('scale%d_depth_image' % s,
+        #                  pred_depth[s][:, :, :, 0:1])
+        # tf.summary.image('scale%d_right_disparity_image' % s,
+        #                  pred_disp[s][:, :, :, 1:2])
+        # tf.summary.image('scale%d_target_image' % s, \
+        #                  deprocess_image(tgt_image_all[s]))
+        # tf.summary.image('scale%d_src_image' % s, \
+        #                  deprocess_image(src_image_all[s]))
 
-        tf.summary.image('scale_projected_image',
-                         deprocess_image(proj_image_depth_all[s]))
-        tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
-        tf.summary.image('scale_flyout_mask', flyout_map_all[s])
+        # tf.summary.image('scale_projected_image',
+        #                  deprocess_image(proj_image_depth_all[s]))
+        # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
+        # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
         self.summ_op = tf.summary.merge(summaries)
 
 

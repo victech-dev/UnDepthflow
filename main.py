@@ -61,6 +61,7 @@ flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_float('learning_rate', 0.0001,
                    'the base learning rate of the generator')
 flags.DEFINE_integer('num_gpus', 1, 'the number of gpu to use')
+flags.DEFINE_float('weight_decay', 0.0001, 'scale of l2 regularization')
 
 flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
@@ -101,14 +102,14 @@ def main(unused_argv):
         Model = Model_depthflow
         Model_eval = Model_eval_depthflow
 
-        opt.eval_flow = True
+        opt.eval_flow = False # True
         opt.eval_depth = True
-        opt.eval_mask = True
+        opt.eval_mask = False # True
     elif FLAGS.mode == "depth":  # stage 2: train depth
         Model = Model_depth
         Model_eval = Model_eval_depth
 
-        opt.eval_flow = True
+        opt.eval_flow = False # True
         opt.eval_depth = True
         opt.eval_mask = False
     elif FLAGS.mode == "flow":  # stage 1: train flow
@@ -209,15 +210,17 @@ def main(unused_argv):
                                 reuse_scope=True,
                                 scope=vs)
 
-                        loss = model.loss
+                        # VICTECH add regularization loss (why this is missed in original repo?)
+                        loss = model.loss                        
+                        reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+                        total_loss = loss + reg_loss
                         # Retain the summaries from the final tower.
                         if i == FLAGS.num_gpus - 1:
-                            summaries = tf.get_collection(
-                                tf.GraphKeys.SUMMARIES, ns)
+                            summaries_additional = [tf.summary.scalar("reg_loss", reg_loss)]
                             eval_model = Model_eval(scope=vs)
                         # Calculate the gradients for the batch of data on this CIFAR tower.
                         grads = train_op.compute_gradients(
-                            loss, var_list=var_train_list)
+                            total_loss, var_list=var_train_list)
 
                         # Keep track of the gradients across all towers.
                         tower_grads.append(grads)
@@ -234,7 +237,7 @@ def main(unused_argv):
         saver = tf.train.Saver(max_to_keep=10)
 
         # Build the summary operation from the last tower summaries.
-        summary_op = tf.summary.merge(summaries + summaries_cpu)
+        summary_op = tf.summary.merge(summaries_additional + summaries_cpu)
 
         # Make training session.
         config = tf.ConfigProto()
@@ -289,14 +292,13 @@ def main(unused_argv):
         # Run training.
         for itr in range(start_itr, FLAGS.num_iterations):
             if FLAGS.train_test == "train":
-                _, summary_str, summary_scalar_str = sess.run(
+                _, summary_str, summary_model_str = sess.run(
                     [apply_gradient_op, summary_op, model.summ_op])
 
+                # VICTECH note we are not getting image summaries like original repo
                 if (itr) % (SUMMARY_INTERVAL) == 2:
-                    summary_writer.add_summary(summary_scalar_str, itr)
-
-                if (itr) % (SUMMARY_INTERVAL * 10) == 2:
                     summary_writer.add_summary(summary_str, itr)
+                    summary_writer.add_summary(summary_model_str, itr)
 
                 if (itr) % (SAVE_INTERVAL) == 2:
                     saver.save(

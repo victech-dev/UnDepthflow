@@ -15,9 +15,11 @@
 
 import tensorflow as tf
 
+from tensorflow.python.platform import flags
 import tensorflow.contrib.slim as slim
 from optical_flow_warp_old import transformer_old
 
+opt = flags.FLAGS
 
 def resize_like(inputs, ref):
     iH, iW = inputs.get_shape()[1], inputs.get_shape()[2]
@@ -38,7 +40,7 @@ def feature_pyramid_flow(image, reuse):
     with tf.variable_scope('feature_net_flow'):
         with slim.arg_scope(
             [slim.conv2d, slim.conv2d_transpose],
-                weights_regularizer=slim.l2_regularizer(0.0004),
+                weights_regularizer=slim.l2_regularizer(opt.weight_decay),
                 activation_fn=leaky_relu,
                 variables_collections=["flownet"],
                 reuse=reuse):
@@ -75,7 +77,7 @@ def cost_volumn(feature1, feature2, d=4):
 def optical_flow_decoder_dc(inputs, level):
     with slim.arg_scope(
         [slim.conv2d, slim.conv2d_transpose],
-            weights_regularizer=slim.l2_regularizer(0.0004),
+            weights_regularizer=slim.l2_regularizer(opt.weight_decay),
             activation_fn=leaky_relu):
         cnv1 = slim.conv2d(
             inputs, 128, [3, 3], stride=1, scope="cnv1_fd_" + str(level))
@@ -113,7 +115,7 @@ def optical_flow_decoder_dc(inputs, level):
 def context_net(inputs):
     with slim.arg_scope(
         [slim.conv2d, slim.conv2d_transpose],
-            weights_regularizer=slim.l2_regularizer(0.0004),
+            weights_regularizer=slim.l2_regularizer(opt.weight_decay),
             activation_fn=leaky_relu):
         cnv1 = slim.conv2d(inputs, 128, [3, 3], rate=1, scope="cnv1_cn")
         cnv2 = slim.conv2d(cnv1, 128, [3, 3], rate=2, scope="cnv2_cn")
