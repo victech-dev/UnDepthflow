@@ -241,7 +241,7 @@ def calculate_pose_basis(cam_coords1, cam_coords2, weights, batch_size):
         tf.matmul(cam_coords1_shifted, cam_coords2_shifted) * weights_trans,
         axis=1,
         keep_dims=False)
-    S, U, V = tf.svd(H)
+    S, U, V = tf.linalg.svd(H)
     R = tf.matmul(V, U, transpose_a=False, transpose_b=True)
 
     T = -tf.matmul(R, centroids1) + centroids2
