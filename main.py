@@ -86,11 +86,12 @@ def main(unused_argv):
     from datafind import kitti_data_find
     #VICTECH stereo train
     kitti_data_find()
-    FLAGS.mode = 'stereo'
+    FLAGS.mode = 'depthflow'
     FLAGS.train_test = 'train'
     FLAGS.retrain = True
     FLAGS.train_file = './filenames/kitti_train_files_png_4frames.txt'
-    FLAGS.trace = './results'
+    FLAGS.trace = './results_depthflow'
+    FLAGS.weight_decay = 0.0001
     #VICTECH
 
     if FLAGS.trace == "":
