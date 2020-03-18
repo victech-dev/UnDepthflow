@@ -104,12 +104,12 @@ def batch_from_dataset(opt):
     # convert line to (path0, path1, ... path4)
     def _line2path(x):
         splits = tf.strings.split([x]).values
-        left_image_path = tf.strings.join([opt.data_dir, splits[0]])
-        right_image_path = tf.strings.join([opt.data_dir, splits[1]])
-        next_left_image_path = tf.strings.join([opt.data_dir, splits[2]])
-        next_right_image_path = tf.strings.join([opt.data_dir, splits[3]])
+        img1_path = tf.strings.join([opt.data_dir, splits[0]])
+        img1r_path = tf.strings.join([opt.data_dir, splits[1]])
+        img2_path = tf.strings.join([opt.data_dir, splits[2]])
+        img2r_path = tf.strings.join([opt.data_dir, splits[3]])
         cam_intrinsic_path = tf.strings.join([opt.data_dir, splits[4]])
-        return left_image_path, right_image_path, next_left_image_path, next_right_image_path, cam_intrinsic_path
+        return img1_path, img1r_path, img2_path, img2r_path, cam_intrinsic_path
     ds = ds.map(_line2path, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # shuffle whole dataset
@@ -117,37 +117,32 @@ def batch_from_dataset(opt):
     ds = ds.cache().shuffle(num_lines)
 
     # load image
-    def _loaditems(left_image_path, right_image_path, next_left_image_path, next_right_image_path, cam_intrinsic_path):
-        left_image_o, orig_height, orig_width = read_image(opt, left_image_path, get_shape=True)
-        right_image_o = read_image(opt, right_image_path)
-        next_left_image_o = read_image(opt, next_left_image_path)
-        next_right_image_o = read_image(opt, next_right_image_path)
+    def _loaditems(img1_path, img1r_path, img2_path, img2r_path, cam_intrinsic_path):
+        img1_o, orig_height, orig_width = read_image(opt, img1_path, get_shape=True)
+        img1r_o = read_image(opt, img1r_path)
+        img2_o = read_image(opt, img2_path)
+        img2r_o = read_image(opt, img2r_path)
 
         # randomly flip images
         do_flip = tf.random.uniform([], 0, 1)
-        left_image, right_image = tf.cond(do_flip > 0.5,
-            lambda: (tf.image.flip_left_right(right_image_o), tf.image.flip_left_right(left_image_o)),
-            lambda: (left_image_o, right_image_o))
-        next_left_image, next_right_image = tf.cond(do_flip > 0.5,
-            lambda: (tf.image.flip_left_right(next_right_image_o), tf.image.flip_left_right(next_left_image_o)),
-            lambda: (next_left_image_o, next_right_image_o))
+        img1, img1r = tf.cond(do_flip > 0.5,
+            lambda: (tf.image.flip_left_right(img1r_o), tf.image.flip_left_right(img1_o)),
+            lambda: (img1_o, img1r_o))
+        img2, img2r = tf.cond(do_flip > 0.5,
+            lambda: (tf.image.flip_left_right(img2r_o), tf.image.flip_left_right(img2_o)),
+            lambda: (img2_o, img2r_o))
 
         do_flip_fb = tf.random.uniform([], 0, 1)
-        left_image, right_image, next_left_image, next_right_image = tf.cond(do_flip_fb > 0.5,
-            lambda: (next_left_image, next_right_image, left_image, right_image),
-            lambda: (left_image, right_image, next_left_image, next_right_image))
+        img1, img1r, img2, img2r = tf.cond(do_flip_fb > 0.5,
+            lambda: (img2, img2r, img1, img1r),
+            lambda: (img1, img1r, img2, img2r))
 
         # randomly augment images
         #         do_augment  = tf.random.uniform([], 0, 0)
-        #         image_list = [left_image, right_image, next_left_image, next_right_image]
-        #         left_image, right_image, next_left_image, next_right_image = tf.cond(do_augment > 0.5, 
+        #         image_list = [img1, img1r, img2, img2r]
+        #         img1, img1r, img2, img2r = tf.cond(do_augment > 0.5, 
         #                                                                              lambda: self.augment_image_list(image_list), 
         #                                                                              lambda: image_list)
-
-        left_image.set_shape([None, None, 3])
-        right_image.set_shape([None, None, 3])
-        next_left_image.set_shape([None, None, 3])
-        next_right_image.set_shape([None, None, 3])
 
         raw_cam_contents = tf.io.read_file(cam_intrinsic_path)
         raw_cam_contents = tf.strings.strip(raw_cam_contents)
@@ -158,7 +153,7 @@ def batch_from_dataset(opt):
         raw_cam_mat = rescale_intrinsics(raw_cam_mat, opt, orig_height, orig_width)
         proj_cam2pix, proj_pix2cam = get_multi_scale_intrinsics(raw_cam_mat, opt.num_scales)
 
-        return left_image, right_image, next_left_image, next_right_image, proj_cam2pix, proj_pix2cam
+        return img1, img1r, img2, img2r, proj_cam2pix, proj_pix2cam
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # repeat, batch

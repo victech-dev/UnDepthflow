@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from tensorflow.python.platform import flags
 
-from dataset_gen import batch_from_dataset
+from monodepth_dataloader_v2 import batch_from_dataset
 
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
@@ -26,7 +26,8 @@ def train(Model, Model_eval):
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.train.AdamOptimizer(opt.learning_rate)
 
-        image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
+        with tf.device('/cpu:0'):
+            image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs, tf.name_scope("model") as ns:
             model = Model(image1, image2, image1r, image2r,
