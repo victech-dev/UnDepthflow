@@ -14,7 +14,7 @@ from test import test
 SUMMARY_INTERVAL = 100
 
 # How often to run a batch through the validation model.
-VAL_INTERVAL = 10000 # 2500
+VAL_INTERVAL = 20000 # 2500
 
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
@@ -144,9 +144,8 @@ def train(Model, Model_eval):
                         sess, opt.trace + '/model', global_step=global_step)
 
             print('*** Iteration done:', itr)
-            # VICTECH turn off evaluation during training by default
-            # if (itr) % (VAL_INTERVAL) == 2 or opt.train_test == "test":
-            #     test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-            #          gt_flows_2015, noc_masks_2015, gt_masks)
+            if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
+                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
+                     gt_flows_2015, noc_masks_2015, gt_masks)
 
 
