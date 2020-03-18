@@ -195,9 +195,9 @@ def main(unused_argv):
         Model = Model_depthflow
         Model_eval = Model_eval_depthflow
 
-        opt.eval_flow = False # True
+        opt.eval_flow = True
         opt.eval_depth = True
-        opt.eval_mask = False # True
+        opt.eval_mask = True
     elif FLAGS.mode == "depth":  # stage 2: train depth
         Model = Model_depth
         Model_eval = Model_eval_depth
