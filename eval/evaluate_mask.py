@@ -196,14 +196,14 @@ def check_size(eval_segm, gt_segm):
         raise EvalSegErr("DiffDim: Different dimensions of matrices!")
 
 
-def read_mask_gt_worker(i):
-    return imgtool.imread(
-        FLAGS.gt_2015_dir + "/obj_map/" + str(i).zfill(6) + "_10.png", -1)
+def read_mask_gt_worker(fname):
+    return imgtool.imread(fname, -1)
 
 
 def load_gt_mask():
+    fnames = [os.path.join(FLAGS.gt_2015_dir, "obj_map", f"{i:06}_10.png") for i in range(200)]
     pool = multiprocessing.Pool(5)
-    results = pool.imap(read_mask_gt_worker, range(200), chunksize=10)
+    results = pool.imap(read_mask_gt_worker, fnames, chunksize=10)
     pool.close()
     pool.join()
 
