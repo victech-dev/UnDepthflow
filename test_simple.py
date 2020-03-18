@@ -39,7 +39,7 @@ flags.DEFINE_string('gt_2015_dir', '',
 flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
 
-flags.DEFINE_float('weight_decay', 0.0, 'scale of l2 regularization')
+flags.DEFINE_float('weight_decay', 0.0004, 'scale of l2 regularization')
 
 flags.DEFINE_float("depth_smooth_weight", 10.0, "Weight for depth smoothness")
 flags.DEFINE_float("ssim_weight", 0.85,
@@ -179,12 +179,14 @@ def show_pcd(img, depth, K):
 
 def main(unused_argv):
     from datafind import kitti_data_find
-    #VICTECH stereo test
-    kitti_data_find()
-    FLAGS.mode = 'stereo'
-    FLAGS.pretrained_model = './stereo_results/model-297503'
-    # FLAGS.mode = 'depthflow'
-    # FLAGS.pretrained_model = './depthflow_results/model-297503'
+    #VICTECH test
+    kitti_data_find(opt)
+    opt.mode = 'stereo'
+    opt.pretrained_model = './results_stereo/model-297503'
+    # opt.mode = 'depth'
+    # opt.pretrained_model = './results_depth/model-297503'
+    # opt.mode = 'depthflow'
+    # opt.pretrained_model = './results_depthflow/model-297503'
     #VICTECH
 
     print('Constructing models and inputs.')
@@ -244,7 +246,7 @@ def main(unused_argv):
 
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
-        saver.restore(sess, FLAGS.pretrained_model)
+        saver.restore(sess, opt.pretrained_model)
 
         # # evaluate KITTI gt 2012/2015
         # if opt.eval_flow:

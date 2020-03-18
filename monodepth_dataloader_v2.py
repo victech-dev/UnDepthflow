@@ -199,7 +199,8 @@ if __name__ == '__main__':
         t0 = time.time()
         for i in range(256):
             img1, img1r, img2, img2r, cam2pix, pix2cam = sess.run(element)
-            print(pix2cam)
+            print("*** cam2pix[0]:", cam2pix[0])
+            print("*** pix2cam[0]:", pix2cam[0])
             cv2.imshow('hoho', img1[0])
             cv2.waitKey(0)
         t1 = time.time()
