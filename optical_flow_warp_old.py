@@ -16,8 +16,10 @@ import tensorflow as tf
 from tensorflow.python.platform import app
 import numpy as np
 
-
+from inv_warp_flow import inv_warp_flow 
 def transformer_old(U, flo, out_size, name='SpatialTransformer', **kwargs):
+    return inv_warp_flow(U, flo, out_size)
+    
     """Backward warping layer
 
     Implements a backward warping layer described in 
