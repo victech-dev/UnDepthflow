@@ -47,6 +47,9 @@ def inverse_warp(depth,
     Args:
         depth: depth map of the target image -- [B, H, W]
         pose: 6DoF pose parameters from target to source -- [B, 6]
+              *VICTECH* this is actually camera movement from source to target, 
+              i.e. this equals to source camera view matrix w.r.t target camera coord system
+              i.e. this transforms pos w.r.t target camera coord system to pos w.r.t src camera coord system
         intrinsics: camera intrinsic matrix -- [B, 3, 3]
         intrinsics_inv: inverse of the intrinsic matrix -- [B, 3, 3]
     Returns:

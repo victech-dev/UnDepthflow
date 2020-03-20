@@ -178,50 +178,15 @@ def show_pcd(img, depth, K):
 
 
 def main(unused_argv):
-    from datafind import kitti_data_find
     #VICTECH test
-    kitti_data_find(opt)
-    opt.mode = 'stereo'
+    from autoflags import autoflags
+    Model, Model_eval = autoflags(opt, 'stereo', True)
     opt.pretrained_model = './results_stereo/model-297503'
-    # opt.mode = 'depth'
     # opt.pretrained_model = './results_depth/model-297503'
-    # opt.mode = 'depthflow'
     # opt.pretrained_model = './results_depthflow/model-297503'
     #VICTECH
 
     print('Constructing models and inputs.')
-
-    if FLAGS.mode == "depthflow":  # stage 3: train depth and flow together
-        Model = Model_depthflow
-        Model_eval = Model_eval_depthflow
-
-        opt.eval_flow = True
-        opt.eval_depth = True
-        opt.eval_mask = True
-    elif FLAGS.mode == "depth":  # stage 2: train depth
-        Model = Model_depth
-        Model_eval = Model_eval_depth
-
-        opt.eval_flow = True
-        opt.eval_depth = True
-        opt.eval_mask = False
-    elif FLAGS.mode == "flow":  # stage 1: train flow
-        Model = Model_flow
-        Model_eval = Model_eval_flow
-
-        opt.eval_flow = True
-        opt.eval_depth = False
-        opt.eval_mask = False
-    elif FLAGS.mode == "stereo":
-        Model = Model_stereo
-        Model_eval = Model_eval_stereo
-
-        opt.eval_flow = False
-        opt.eval_depth = True
-        opt.eval_mask = False
-    else:
-        raise "mode must be one of flow, depth, depthflow or stereo"
-
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         image1 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1')
         image1r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1r')

@@ -83,14 +83,12 @@ flags.DEFINE_boolean('eval_mask', False, '')
 opt = FLAGS
 
 def main(unused_argv):
-    from datafind import kitti_data_find
     #VICTECH train
-    kitti_data_find(opt)
-    opt.mode = 'depthflow'
+    from autoflags import autoflags
+    Model, Model_eval = autoflags(opt, 'depthflow', True)
+    opt.trace = './results_depthflow'
     opt.train_test = 'train'
     opt.retrain = True
-    opt.train_file = './filenames/kitti_train_files_png_4frames.txt'
-    opt.trace = './results_depthflow'
     opt.weight_decay = 0.0001
     #VICTECH
 
@@ -98,37 +96,6 @@ def main(unused_argv):
         raise Exception("OUT_DIR must be specified")
 
     print('Constructing models and inputs.')
-
-    if FLAGS.mode == "depthflow":  # stage 3: train depth and flow together
-        Model = Model_depthflow
-        Model_eval = Model_eval_depthflow
-
-        opt.eval_flow = True
-        opt.eval_depth = True
-        opt.eval_mask = True
-    elif FLAGS.mode == "depth":  # stage 2: train depth
-        Model = Model_depth
-        Model_eval = Model_eval_depth
-
-        opt.eval_flow = True
-        opt.eval_depth = True
-        opt.eval_mask = False
-    elif FLAGS.mode == "flow":  # stage 1: train flow
-        Model = Model_flow
-        Model_eval = Model_eval_flow
-
-        opt.eval_flow = True
-        opt.eval_depth = False
-        opt.eval_mask = False
-    elif FLAGS.mode == "stereo":
-        Model = Model_stereo
-        Model_eval = Model_eval_stereo
-
-        opt.eval_flow = False
-        opt.eval_depth = True
-        opt.eval_mask = False
-    else:
-        raise "mode must be one of flow, depth, depthflow or stereo"
 
     if opt.num_gpus == 1:
         from train_single_gpu import train
