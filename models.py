@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.python.platform import flags
 
 from nets.pose_net import pose_exp_net
-from monodepth_model import disp_godard
+from monodepth_model import disp_godard, disp_godard2
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
 from nets.pwc_disp import feature_pyramid_disp
 from optical_flow_warp_fwd import transformerFwd
@@ -34,13 +34,10 @@ class Model_stereo(object):
             feature1_disp = feature_pyramid_disp(image1, reuse=False)
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
 
-            pred_disp, stereo_smooth_loss = disp_godard(
-                image1,
-                image1r,
-                feature1_disp,
-                feature1r_disp,
-                opt,
-                is_training=True)
+            stereo_model = disp_godard2(image1, image1r,
+                feature1_disp, feature1r_disp, opt, is_training=True)
+            pred_disp = [stereo_model.disp1, stereo_model.disp2, stereo_model.disp3, stereo_model.disp4]
+            stereo_smooth_loss = stereo_model.total_loss
 
             pred_depth = [1. / d for d in pred_disp]
 
@@ -49,6 +46,16 @@ class Model_stereo(object):
         summaries.append(tf.summary.scalar("total_loss", self.loss))
         summaries.append(
             tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
+
+        #DEBUG!! smoothness loss
+        for i in range(4):
+            summaries.append(
+                tf.summary.scalar(
+                    'disp_gradient_loss_' + str(i),
+                    stereo_model.disp_left_loss[i] + stereo_model.disp_right_loss[i]))
+        summaries.append(
+            tf.summary.scalar('disp_gradient_loss', stereo_model.disp_gradient_loss))
+        #DEBUG!! smoothness loss
 
         # VICTECH disable this for training performance
         # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])

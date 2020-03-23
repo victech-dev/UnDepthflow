@@ -138,7 +138,10 @@ class MonodepthModel(object):
 
         smoothness_x = [disp_gradients_x[i] * weights_x[i] for i in range(4)]
         smoothness_y = [disp_gradients_y[i] * weights_y[i] for i in range(4)]
-        return smoothness_x + smoothness_y
+        # return smoothness_x + smoothness_y
+        smoothness_x = [tf.reshape(s, (self.params.batch_size, -1)) for s in smoothness_x]
+        smoothness_y = [tf.reshape(s, (self.params.batch_size, -1)) for s in smoothness_y]
+        return [tf.concat([smoothness_x[i], smoothness_y[i]], axis=-1) for i in range(4)]
 
     def get_disparity_smoothness_2nd(self, disp, pyramid):
         disp_gradients_x = [self.gradient_x(d) for d in disp]
@@ -168,6 +171,32 @@ class MonodepthModel(object):
             disp_gradients_yy[i] * weights_y[i][:, :-1, :, :] for i in range(4)
         ]
         return smoothness_x + smoothness_y
+
+    def get_depth_smoothness_from_disp(self, disp, pyramid):
+        depth = [1.0 / d for d in disp]
+
+        def _abs_gradient2nd(gray):
+            fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
+            filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
+            i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
+            ret = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
+            return tf.abs(ret) # [batch, height, width, (dyy,dxx)]
+
+        def _abs_gradient(img):
+            rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
+            sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
+            sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
+            sobel_abs = tf.abs(sobel_weighted)
+            return tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (dy,dx)]
+
+        depth_grad2 = [_abs_gradient2nd(d) for d in depth]
+        image_grad = [_abs_gradient(img) for img in pyramid]
+        weights = [tf.exp(-1.0 * g) for g in image_grad]
+        smoothness = [
+            tf.reduce_sum(tf.clip_by_value(v*w, 0, 8), axis=-1, keepdims=True)
+            for v, w in zip(depth_grad2, weights)
+        ]
+        return smoothness
 
     def get_disp(self, x):
         disp = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
@@ -459,9 +488,9 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = self.get_disparity_smoothness_2nd(
+            self.disp_left_smoothness = self.get_depth_smoothness_from_disp(
                 self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = self.get_disparity_smoothness_2nd(
+            self.disp_right_smoothness = self.get_depth_smoothness_from_disp(
                 self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
@@ -522,14 +551,8 @@ class MonodepthModel(object):
                                        self.image_loss_right)
 
             # DISPARITY SMOOTHNESS
-            self.disp_left_loss = [
-                tf.reduce_mean(tf.abs(self.disp_left_smoothness[i])) / 2**i
-                for i in range(4 * 2)
-            ]
-            self.disp_right_loss = [
-                tf.reduce_mean(tf.abs(self.disp_right_smoothness[i])) / 2**i
-                for i in range(4 * 2)
-            ]
+            self.disp_left_loss = [tf.reduce_mean(s) / 2**i for i, s in enumerate(self.disp_left_smoothness)]
+            self.disp_right_loss = [tf.reduce_mean(s) / 2**i for i, s in enumerate(self.disp_right_smoothness)]
             self.disp_gradient_loss = tf.add_n(self.disp_left_loss +
                                                self.disp_right_loss) * 0.5
 
@@ -670,3 +693,28 @@ def disp_godard(left_img,
         model = MonodepthModel(params, "test", left_img, right_img,
                                left_feature, right_feature)
         return [model.disp1, model.disp2, model.disp3, model.disp4]
+
+def disp_godard2(left_img,
+                right_img,
+                left_feature,
+                right_feature,
+                opt,
+                is_training=True):
+    params = monodepth_parameters(
+        encoder="pwc",
+        do_stereo=True,
+        wrap_mode='border',
+        use_deconv=False,
+        alpha_image_loss=opt.ssim_weight,
+        disp_gradient_loss_weight=opt.depth_smooth_weight,
+        lr_loss_weight=1.0,
+        full_summary=False,
+        height=opt.img_height,
+        width=opt.img_width,
+        batch_size=int(left_img.get_shape()[0]))
+    if is_training:
+        return MonodepthModel(params, "train", left_img, right_img, left_feature, right_feature)
+        # return [model.disp1, model.disp2, model.disp3, model.disp4], model.total_loss
+    else:
+        return MonodepthModel(params, "test", left_img, right_img, left_feature, right_feature)
+        #return [model.disp1, model.disp2, model.disp3, model.disp4]

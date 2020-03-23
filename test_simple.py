@@ -206,7 +206,10 @@ def main(unused_argv):
         saver = tf.train.Saver(max_to_keep=10)
 
         # Make training session.
-        config = tf.ConfigProto(device_count={'GPU':0})
+        config = tf.ConfigProto()
+        config.allow_soft_placement = True
+        config.log_device_placement = False
+        config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 
         sess.run(tf.global_variables_initializer())
