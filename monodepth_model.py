@@ -172,29 +172,29 @@ class MonodepthModel(object):
         ]
         return smoothness_x + smoothness_y
 
-    def get_depth_smoothness_from_disp(self, disp, pyramid):
-        depth = [1.0 / d for d in disp]
-
-        def _abs_gradient2nd(gray):
+    def get_disparity_smoothness_v2(self, disp, pyramid):
+        def _IyyIxx_abs(gray):
             fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
             filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
             i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
             ret = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
             return tf.abs(ret) # [batch, height, width, (dyy,dxx)]
 
-        def _abs_gradient(img):
+        def _IyIx_abs(img):
+            # x10 scale compared to vanila gradient
             rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
             sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
             sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
             sobel_abs = tf.abs(sobel_weighted)
             return tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (dy,dx)]
 
-        depth_grad2 = [_abs_gradient2nd(d) for d in depth]
-        image_grad = [_abs_gradient(img) for img in pyramid]
+        disp_norm = [d / tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
+        disp_grad2 = [_IyyIxx_abs(d) for d in disp_norm]
+        image_grad = [_IyIx_abs(img) for img in pyramid]
         weights = [tf.exp(-1.0 * g) for g in image_grad]
         smoothness = [
-            tf.reduce_sum(tf.clip_by_value(v*w, 0, 8), axis=-1, keepdims=True)
-            for v, w in zip(depth_grad2, weights)
+            tf.reduce_sum(v*w, axis=-1, keepdims=True)
+            for v, w in zip(disp_grad2, weights)
         ]
         return smoothness
 
@@ -488,9 +488,9 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = self.get_depth_smoothness_from_disp(
+            self.disp_left_smoothness = self.get_disparity_smoothness_v2(
                 self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = self.get_depth_smoothness_from_disp(
+            self.disp_right_smoothness = self.get_disparity_smoothness_v2(
                 self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):

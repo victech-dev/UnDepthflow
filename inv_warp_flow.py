@@ -74,10 +74,10 @@ def inv_warp_flow(image, flo, out_size, name='inv_warp_flow'):
         height_f, width_f = tf.cast(height, tf.float32), tf.cast(width, tf.float32)
         out_height, out_width = out_size
 
-        # Turn the flow into a list of generate query points in the grid space
+        # Turn the flow into a list of query points on the grid space
         gx, gy = tf.meshgrid(tf.linspace(0.0, width_f-1, out_width), tf.linspace(0.0, height_f-1, out_height))
         gxy = tf.stack([gx[None], gy[None]], axis=-1)
-        scale = tf.convert_to_tensor([(width_f-1)/(out_width-1), (height_f-1)/(out_height-1)])
+        scale = tf.stack([width_f-1, height_f-1]) / tf.cast(tf.stack([out_width-1, out_height-1]), tf.float32)
         gxy += flo * scale[None,None,None,:]
         gxy_flatten = tf.reshape(gxy, [num_batch, out_height*out_width, 2])
 
