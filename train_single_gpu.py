@@ -64,7 +64,8 @@ def train(Model, Model_eval):
             # VICTECH add regularization loss (why this is missed in original repo?)
             loss = model.loss                        
             reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-            total_loss = loss + reg_loss
+            # total_loss = loss + reg_loss (for now, turn off regularization)
+            total_loss = loss
 
             summaries_additional = [tf.summary.scalar("reg_loss", reg_loss)]
             grads = train_op.compute_gradients(
