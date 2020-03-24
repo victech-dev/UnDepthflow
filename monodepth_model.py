@@ -147,6 +147,14 @@ class MonodepthModel(object):
         smoothness_y = [tf.reshape(s, (self.params.batch_size, -1)) for s in smoothness_y]
         return [tf.concat([smoothness_x[i], smoothness_y[i]], axis=-1) for i in range(4)]
 
+    def get_disparity_smoothness_v3(self, disp, pyramid):
+        # same as monodepth, index bug fixed
+        disp_gradients = [tf.stack(tf.image.image_gradients(d), axis=-1) for d in disp]
+        image_gradients = [tf.stack(tf.image.image_gradients(img), axis=-1) for img in pyramid]
+        weights = [tf.exp(-tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients]
+        # [batch, height, width, 1, 2]
+        return [v*w for v, w in zip(disp_gradients, weights)]
+
     def get_disparity_smoothness_2nd(self, disp, pyramid):
         disp_gradients_x = [self.gradient_x(d) for d in disp]
         disp_gradients_y = [self.gradient_y(d) for d in disp]
@@ -492,9 +500,9 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = self.get_disparity_smoothness_v2(
+            self.disp_left_smoothness = self.get_disparity_smoothness_v3(
                 self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = self.get_disparity_smoothness_v2(
+            self.disp_right_smoothness = self.get_disparity_smoothness_v3(
                 self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
@@ -555,8 +563,8 @@ class MonodepthModel(object):
                                        self.image_loss_right)
 
             # DISPARITY SMOOTHNESS
-            self.disp_left_loss = [tf.reduce_mean(s) / 2**i for i, s in enumerate(self.disp_left_smoothness)]
-            self.disp_right_loss = [tf.reduce_mean(s) / 2**i for i, s in enumerate(self.disp_right_smoothness)]
+            self.disp_left_loss = [tf.reduce_mean(tf.abs(s)) / 2**i for i, s in enumerate(self.disp_left_smoothness)]
+            self.disp_right_loss = [tf.reduce_mean(tf.abs(s)) / 2**i for i, s in enumerate(self.disp_right_smoothness)]
             self.disp_gradient_loss = tf.add_n(self.disp_left_loss +
                                                self.disp_right_loss) * 0.5
 

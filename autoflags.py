@@ -6,7 +6,7 @@ def autoflags(opt, mode, do_eval):
     opt.eval_flow, opt.eval_depth, opt.eval_mask = False, False, False
 
     # data path
-    dirs = ['/media/data/datasets/kitti_data', '/media/vicnas/datasets/kitti_data', 
+    dirs = ['/media/data/datasets/kitti_data', '~/datasets/kitti_data', '/media/vicnas/datasets/kitti_data', 
         'C:\\datasets\\kitti_data', 'D:\\datasets\\kitti_data', 'M:\\datasets\\kitti_data']
     found = next((x for x in dirs if os.path.isdir(x)), None)
     if found is None:
