@@ -9,6 +9,7 @@ from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
 
 from test import test
+from tqdm import trange
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -130,7 +131,7 @@ def train(Model, Model_eval):
               None, None, None, None, None
 
         # Run training.
-        for itr in range(start_itr, opt.num_iterations):
+        for itr in trange(start_itr, opt.num_iterations, ncols=None):
             if opt.train_test == "train":
                 _, summary_str, summary_model_str = sess.run(
                     [apply_gradient_op, summary_op, model.summ_op])
@@ -144,7 +145,6 @@ def train(Model, Model_eval):
                     saver.save(
                         sess, opt.trace + '/model', global_step=global_step)
 
-            print('*** Iteration done:', itr)
             if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
                 test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
                      gt_flows_2015, noc_masks_2015, gt_masks)
