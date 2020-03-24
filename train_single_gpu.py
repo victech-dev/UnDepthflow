@@ -10,6 +10,7 @@ from loss_utils import average_gradients
 
 from test import test
 from tqdm import trange
+import sys
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -136,7 +137,7 @@ def train(Model, Model_eval):
               None, None, None, None, None
 
         # Run training.
-        for itr in trange(start_itr, opt.num_iterations, ncols=None):
+        for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
             if opt.train_test == "train":
                 _, summary_str = sess.run(
                     [apply_gradient_op, summary_op])
