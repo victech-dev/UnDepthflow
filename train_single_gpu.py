@@ -141,7 +141,7 @@ def train(Model, Model_eval):
                     summary_writer.add_summary(summary_str, itr)
                     summary_writer.add_summary(summary_model_str, itr)
 
-                if (itr) % (SAVE_INTERVAL) == 2:
+                if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                     saver.save(
                         sess, opt.trace + '/model', global_step=global_step)
 
