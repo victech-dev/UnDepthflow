@@ -2,7 +2,7 @@ from __future__ import division
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from optical_flow_warp_old import transformer_old
+from core_warp import inv_warp_flow
 import pdb
 from tensorflow.python.platform import app
 """
@@ -440,8 +440,7 @@ def inverse_warp_new(depth1,
     cam_coords2 = tf.reshape(cam_coords2,
                              [batch_size, 3, img_height, img_width])
     cam_coords2 = tf.transpose(cam_coords2, [0, 2, 3, 1])
-    cam_coords2_trans = transformer_old(cam_coords2, flow_input,
-                                        [img_height, img_width])
+    cam_coords2_trans = inv_warp_flow(cam_coords2, flow_input)
     # Point Cloud \tilda{Q_1}
     cam_coords2_trans = tf.reshape(
         tf.transpose(cam_coords2_trans, [0, 3, 1, 2]), [batch_size, 3, -1])

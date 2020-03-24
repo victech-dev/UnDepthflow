@@ -6,7 +6,7 @@ from monodepth_model import disp_godard
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
 from nets.pwc_disp import feature_pyramid_disp
 from optical_flow_warp_fwd import transformerFwd
-from optical_flow_warp_old import transformer_old
+from core_warp import inv_warp_flow
 from monodepth_dataloader import get_multi_scale_intrinsics
 from utils import inverse_warp, inverse_warp_new
 from loss_utils import SSIM, deprocess_image, preprocess_image,\
@@ -155,8 +155,7 @@ class Model_flow(object):
             occu_mask = occu_masks[s]
             occu_mask_avg = tf.reduce_mean(occu_mask)
 
-            curr_proj_image_optical = transformer_old(
-                curr_src_image, optical_flows[s], [H // (2**s), W // (2**s)])
+            curr_proj_image_optical = inv_warp_flow(curr_src_image, optical_flows[s])
             curr_proj_error_optical = tf.abs(curr_proj_image_optical -
                                              curr_tgt_image)
             pixel_loss_optical += (1.0 - opt.ssim_weight) * tf.reduce_mean(
@@ -325,8 +324,7 @@ class Model_depth(object):
             occu_mask = occu_masks[s]
             occu_mask_avg = tf.reduce_mean(occu_mask)
 
-            curr_proj_image_depth = transformer_old(curr_src_image, depth_flow,
-                                                    [H // (2**s), W // (2**s)])
+            curr_proj_image_depth = inv_warp_flow(curr_src_image, depth_flow)
             curr_proj_error_depth = tf.abs(curr_proj_image_depth -
                                            curr_tgt_image)
             pixel_loss_depth += (1.0 - opt.ssim_weight) * tf.reduce_mean(
@@ -562,22 +560,19 @@ class Model_depthflow(object):
 
             occu_mask_avg = tf.reduce_mean(occu_mask)
 
-            curr_proj_image_depth = transformer_old(curr_src_image, depth_flow,
-                                                    [H // (2**s), W // (2**s)])
+            curr_proj_image_depth = inv_warp_flow(curr_src_image, depth_flow)
             curr_proj_error_depth = tf.abs(curr_proj_image_depth -
                                            curr_tgt_image) * ref_exp_mask
             pixel_loss_depth += (1.0 - opt.ssim_weight) * tf.reduce_mean(
                 curr_proj_error_depth * occu_mask) / occu_mask_avg
 
-            curr_proj_image_depth_orig = transformer_old(
-                curr_src_image, depth_flow_orig, [H // (2**s), W // (2**s)])
+            curr_proj_image_depth_orig = inv_warp_flow(curr_src_image, depth_flow_orig)
             curr_proj_error_depth_orig = tf.abs(curr_proj_image_depth_orig -
                                                 curr_tgt_image) * ref_exp_mask
             pixel_loss_depth += (1.0 - opt.ssim_weight) * tf.reduce_mean(
                 curr_proj_error_depth_orig * occu_mask) / occu_mask_avg
 
-            curr_proj_image_optical = transformer_old(
-                curr_src_image, optical_flows[s], [H // (2**s), W // (2**s)])
+            curr_proj_image_optical = inv_warp_flow(curr_src_image, optical_flows[s])
             curr_proj_error_optical = tf.abs(curr_proj_image_optical -
                                              curr_tgt_image)
             pixel_loss_optical += (1.0 - opt.ssim_weight) * tf.reduce_mean(
@@ -749,5 +744,5 @@ class Model_eval_depthflow(object):
         self.pred_flow_optical = optical_flows[0]
         self.pred_disp = pred_disp[0][:, :, :, 0:1]
         self.pred_disp2 = disp1_trans*0.0 + \
-                          transformer_old(pred_disp_rev[0][:,:,:,0:1], optical_flows[0], [opt.img_height, opt.img_width])*(1.0-0.0)
+                          inv_warp_flow(pred_disp_rev[0][:,:,:,0:1], optical_flows[0])*(1.0-0.0)
         self.pred_mask = 1.0 - ref_exp_mask

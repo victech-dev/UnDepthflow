@@ -14,7 +14,7 @@
 # ==============================================================================
 import tensorflow as tf
 
-def inv_warp_flow(image, flo, out_size, name='inv_warp_flow'):
+def inv_warp_flow(image, flo, name='inv_warp_flow'):
     """Backward warping layer
 
     Implements a backward warping layer described in 
@@ -28,15 +28,12 @@ def inv_warp_flow(image, flo, out_size, name='inv_warp_flow'):
     flo: float
          The optical flow used to do the backward warping.
          shape is [num_batch, height, width, 2]
-    out_size: tuple of two ints
-        The size of the output of the network (height, width)
     """
 
-    def _interpolate_bilinear(im, xy, out_size, name='interpolate_bilinear'):
+    def _interpolate_bilinear(im, xy, name='interpolate_bilinear'):
         with tf.name_scope(name):
             num_batch, height, width, channel = tf.unstack(tf.shape(im))
             height_f, width_f = tf.cast(height, tf.float32), tf.cast(width, tf.float32)
-            out_height, out_width = out_size
 
             x, y = tf.unstack(xy, axis=-1)
             x0f = tf.clip_by_value(tf.floor(x), 0.0, width_f-2.0)
@@ -54,7 +51,7 @@ def inv_warp_flow(image, flo, out_size, name='inv_warp_flow'):
                 with tf.name_scope('gather-' + name):
                     linear_coordinates = batch_offsets + y_coords * width + x_coords
                     gathered_values = tf.gather(flattened_grid, linear_coordinates)
-                    return tf.reshape(gathered_values, [num_batch, out_height * out_width, channel])
+                    return tf.reshape(gathered_values, [num_batch, height * width, channel])
 
             top_left = gather(y0, x0, 'top_left')
             top_right = gather(y0, x1, 'top_right')
@@ -72,19 +69,16 @@ def inv_warp_flow(image, flo, out_size, name='inv_warp_flow'):
     with tf.name_scope(name):
         num_batch, height, width, num_channels = tf.unstack(tf.shape(image))
         height_f, width_f = tf.cast(height, tf.float32), tf.cast(width, tf.float32)
-        out_height, out_width = out_size
 
         # Turn the flow into a list of query points on the grid space
-        gx, gy = tf.meshgrid(tf.linspace(0.0, width_f-1, out_width), tf.linspace(0.0, height_f-1, out_height))
-        gxy = tf.stack([gx[None], gy[None]], axis=-1)
-        scale = tf.stack([width_f-1, height_f-1]) / tf.cast(tf.stack([out_width-1, out_height-1]), tf.float32)
-        gxy += flo * scale[None,None,None,:]
-        gxy_flatten = tf.reshape(gxy, [num_batch, out_height*out_width, 2])
+        gx, gy = tf.meshgrid(tf.linspace(0.0, width_f-1, width), tf.linspace(0.0, height_f-1, height))
+        gxy = tf.stack([gx[None], gy[None]], axis=-1) + flo
+        gxy_flatten = tf.reshape(gxy, [num_batch, height*width, 2])
 
-        input_transformed = _interpolate_bilinear(image, gxy_flatten, out_size)
+        input_transformed = _interpolate_bilinear(image, gxy_flatten)
         output = tf.reshape(
             input_transformed,
-            tf.stack([num_batch, out_height, out_width, num_channels]))
+            tf.stack([num_batch, height, width, num_channels]))
         return output
 
 if __name__ == '__main__':
@@ -101,5 +95,5 @@ if __name__ == '__main__':
     flo = tf.constant(flo, dtype="float32")
 
     # output should be [[1,2,3],[4,6,6],[7,8,9]]
-    image2 = inv_warp_flow(image, flo, [3, 3])
+    image2 = inv_warp_flow(image, flo)
     print("*** Image:", tf.squeeze(image2))

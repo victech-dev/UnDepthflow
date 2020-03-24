@@ -19,7 +19,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from nets.pwc_disp import pwc_disp
-from optical_flow_warp_old import transformer_old
+from core_warp import inv_warp_flow
 from optical_flow_warp_fwd import transformerFwd
 
 
@@ -98,13 +98,7 @@ class MonodepthModel(object):
         return self.generate_flow_left(-disp, scale)
 
     def generate_transformed(self, img, flow, scale):
-        return transformer_old(
-            img,
-            flow,
-            out_size=[
-                self.params.height // (2**scale),
-                self.params.width // (2**scale)
-            ])
+        return inv_warp_flow(img, flow)
 
     def SSIM(self, x, y):
         C1 = 0.01**2
