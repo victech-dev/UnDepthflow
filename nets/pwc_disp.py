@@ -17,9 +17,6 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
 from optical_flow_warp_old import transformer_old
-#DEBUG!!!!
-from intermtensor import INTERM_TENSOR
-#DEBUG!!!!
 
 opt = flags.FLAGS
 
@@ -146,17 +143,11 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
     feature2_1, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = feature2
 
     cv6 = cost_volumn(feature1_6, feature2_6, d=4)
-    #DEBUG!!!! INTERM_TENSOR
-    tag = 'left' if neg else 'right'
-    INTERM_TENSOR[f'cv6_{tag}'] = cv6
-    #DEBUG!!!!
     flow6, _ = optical_flow_decoder_dc(cv6, level=6)
-    INTERM_TENSOR[f'flow6_prev_{tag}'] = flow6
     if neg:
         flow6 = -tf.nn.relu(-flow6)
     else:
         flow6 = tf.nn.relu(flow6)
-    INTERM_TENSOR[f'flow6_{tag}'] = flow6
 
     flow6to5 = tf.image.resize_bilinear(flow6,
                                         [H // (2**5), (W // (2**5))]) * 2.0
@@ -170,7 +161,6 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow5 = -tf.nn.relu(-flow5)
     else:
         flow5 = tf.nn.relu(flow5)
-    INTERM_TENSOR[f'flow5_{tag}'] = flow5
 
     flow5to4 = tf.image.resize_bilinear(flow5,
                                         [H // (2**4), (W // (2**4))]) * 2.0
@@ -184,7 +174,6 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow4 = -tf.nn.relu(-flow4)
     else:
         flow4 = tf.nn.relu(flow4)
-    INTERM_TENSOR[f'flow4_{tag}'] = flow4
 
     flow4to3 = tf.image.resize_bilinear(flow4,
                                         [H // (2**3), (W // (2**3))]) * 2.0
@@ -198,7 +187,6 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow3 = -tf.nn.relu(-flow3)
     else:
         flow3 = tf.nn.relu(flow3)
-    INTERM_TENSOR[f'flow3_{tag}'] = flow3
 
     flow3to2 = tf.image.resize_bilinear(flow3,
                                         [H // (2**2), (W // (2**2))]) * 2.0
@@ -212,7 +200,6 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow2_raw = -tf.nn.relu(-flow2_raw)
     else:
         flow2_raw = tf.nn.relu(flow2_raw)
-    INTERM_TENSOR[f'flow2raw_{tag}'] = flow2_raw
 
     flow2 = context_net(tf.concat(
         [flow2_raw[:, :, :, 0:1], f2], axis=3)) + flow2_raw
@@ -220,7 +207,6 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
         flow2 = -tf.nn.relu(-flow2)
     else:
         flow2 = tf.nn.relu(flow2)
-    INTERM_TENSOR[f'flow2_{tag}'] = flow2
 
     disp0 = tf.image.resize_bilinear(flow2[:, :, :, 0:1] / (W / (2**2)),
                                      [H, W])

@@ -18,9 +18,6 @@ import imgtool
 import cv2
 import open3d as o3d
 
-#DEBUG!!!!
-from intermtensor import INTERM_TENSOR
-#DEBUG!!!!
 
 FLAGS = flags.FLAGS
 
@@ -72,19 +69,6 @@ def predict_depth_single(sess, eval_model, image1, image2, image1r, image2r, K, 
     # zoom K
     K = scale_intrinsics(K, opt.img_width / width, opt.img_height / height)
     # session run
-    #DEBUG!!!! 어디서 zero-out 되어버리는지 추적중....
-    # _all = sess.run(
-    #     #list(INTERM_TENSOR['feature1_disp']) + list(INTERM_TENSOR['feature1r_disp']) + \
-    #     #[INTERM_TENSOR['flow6_left'], INTERM_TENSOR['flow5_left'], INTERM_TENSOR['flow4_left'], INTERM_TENSOR['flow3_left'], INTERM_TENSOR['flow2raw_left'], INTERM_TENSOR['flow2_left']],
-    #     [INTERM_TENSOR['cv6_left'], INTERM_TENSOR['flow6_prev_left'], INTERM_TENSOR['flow6_left']] +
-    #     [INTERM_TENSOR['cv6_right'], INTERM_TENSOR['flow6_prev_right'], INTERM_TENSOR['flow6_right']],
-    #     feed_dict = {
-    #         eval_model.input_1: img1, eval_model.input_2: img2,
-    #         eval_model.input_r: img1r, eval_model.input_2r: img2r, 
-    #         eval_model.input_intrinsic: K})
-    # _all = [np.squeeze(v) for v in _all]
-    #DEBUG!!!!
-
     pred_disp, _ = sess.run(
         [eval_model.pred_disp, eval_model.pred_mask],
         feed_dict = {

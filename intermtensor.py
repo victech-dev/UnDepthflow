@@ -1,1 +1,0 @@
-INTERM_TENSOR = {}

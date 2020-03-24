@@ -14,9 +14,6 @@ from loss_utils import SSIM, deprocess_image, preprocess_image,\
 
 opt = flags.FLAGS
 
-#DEBUG!!!!
-from intermtensor import INTERM_TENSOR
-#DEBUG!!!!
 
 class Model_stereo(object):
     def __init__(self,
@@ -679,17 +676,9 @@ class Model_eval_depthflow(object):
 
             feature1_disp = feature_pyramid_disp(input_1, reuse=True)
             feature1r_disp = feature_pyramid_disp(input_1r, reuse=True)
-            #DEBUG!!!!
-            INTERM_TENSOR['feature1_disp'] = feature1_disp
-            INTERM_TENSOR['feature1r_disp'] = feature1r_disp
-            #DEBUG!!!!
 
             feature2_disp = feature_pyramid_disp(input_2, reuse=True)
             feature2r_disp = feature_pyramid_disp(input_2r, reuse=True)
-            #DEBUG!!!!
-            INTERM_TENSOR['feature2_disp'] = feature2_disp
-            INTERM_TENSOR['feature2r_disp'] = feature2r_disp
-            #DEBUG!!!!
 
             feature1_flow = feature_pyramid_flow(input_1, reuse=True)
             feature2_flow = feature_pyramid_flow(input_2, reuse=True)
