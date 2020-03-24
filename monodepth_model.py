@@ -41,7 +41,6 @@ class MonodepthModel(object):
         self.right = right
         self.left_feature = left_feature
         self.right_feature = right_feature
-        self.model_collection = ['model_' + str(model_index)]
 
         self.reuse_variables = reuse_variables
 
@@ -52,6 +51,11 @@ class MonodepthModel(object):
         # 
 
         self.build_losses()
+
+        with tf.name_scope('monodepth'):
+            tf.summary.scalar('image_loss', self.image_loss)
+            tf.summary.scalar('disp_gradient_loss', self.disp_gradient_loss)
+            tf.summary.scalar('lr_loss', self.lr_loss)
 
 #         self.build_summaries()     
 
@@ -572,89 +576,72 @@ class MonodepthModel(object):
             for i in range(4):
                 tf.summary.scalar(
                     'ssim_loss_' + str(i),
-                    self.ssim_loss_left[i] + self.ssim_loss_right[i],
-                    collections=self.model_collection)
+                    self.ssim_loss_left[i] + self.ssim_loss_right[i])
                 tf.summary.scalar(
                     'l1_loss_' + str(i),
                     self.l1_reconstruction_loss_left[i] +
-                    self.l1_reconstruction_loss_right[i],
-                    collections=self.model_collection)
+                    self.l1_reconstruction_loss_right[i])
                 tf.summary.scalar(
                     'image_loss_' + str(i),
-                    self.image_loss_left[i] + self.image_loss_right[i],
-                    collections=self.model_collection)
+                    self.image_loss_left[i] + self.image_loss_right[i])
                 tf.summary.scalar(
                     'disp_gradient_loss_' + str(i),
-                    self.disp_left_loss[i] + self.disp_right_loss[i],
-                    collections=self.model_collection)
+                    self.disp_left_loss[i] + self.disp_right_loss[i])
                 tf.summary.scalar(
                     'lr_loss_' + str(i),
-                    self.lr_left_loss[i] + self.lr_right_loss[i],
-                    collections=self.model_collection)
+                    self.lr_left_loss[i] + self.lr_right_loss[i])
                 tf.summary.image(
                     'disp_left_est_' + str(i),
                     self.disp_left_est[i],
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
                 tf.summary.image(
                     'disp_right_est_' + str(i),
                     self.disp_right_est[i],
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
                 tf.summary.image(
                     'occ_left_est_' + str(i),
                     self.left_occ_mask[i],
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
                 tf.summary.image(
                     'occ_right_est_' + str(i),
                     self.right_occ_mask[i],
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
 
                 if self.params.full_summary:
                     tf.summary.image(
                         'left_est_' + str(i),
                         self.left_est[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
                     tf.summary.image(
                         'right_est_' + str(i),
                         self.right_est[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
                     tf.summary.image(
                         'ssim_left_' + str(i),
                         self.ssim_left[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
                     tf.summary.image(
                         'ssim_right_' + str(i),
                         self.ssim_right[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
                     tf.summary.image(
                         'l1_left_' + str(i),
                         self.l1_left[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
                     tf.summary.image(
                         'l1_right_' + str(i),
                         self.l1_right[i],
-                        max_outputs=4,
-                        collections=self.model_collection)
+                        max_outputs=4)
 
             if self.params.full_summary:
                 tf.summary.image(
                     'left',
                     self.left,
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
                 tf.summary.image(
                     'right',
                     self.right,
-                    max_outputs=4,
-                    collections=self.model_collection)
+                    max_outputs=4)
 
 monodepth_parameters = namedtuple('parameters', 'encoder, '
                                   'do_stereo, '
@@ -694,27 +681,3 @@ def disp_godard(left_img,
                                left_feature, right_feature)
         return [model.disp1, model.disp2, model.disp3, model.disp4]
 
-def disp_godard2(left_img,
-                right_img,
-                left_feature,
-                right_feature,
-                opt,
-                is_training=True):
-    params = monodepth_parameters(
-        encoder="pwc",
-        do_stereo=True,
-        wrap_mode='border',
-        use_deconv=False,
-        alpha_image_loss=opt.ssim_weight,
-        disp_gradient_loss_weight=opt.depth_smooth_weight,
-        lr_loss_weight=1.0,
-        full_summary=False,
-        height=opt.img_height,
-        width=opt.img_width,
-        batch_size=int(left_img.get_shape()[0]))
-    if is_training:
-        return MonodepthModel(params, "train", left_img, right_img, left_feature, right_feature)
-        # return [model.disp1, model.disp2, model.disp3, model.disp4], model.total_loss
-    else:
-        return MonodepthModel(params, "test", left_img, right_img, left_feature, right_feature)
-        #return [model.disp1, model.disp2, model.disp3, model.disp4]

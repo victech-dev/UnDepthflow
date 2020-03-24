@@ -30,56 +30,58 @@ def train(Model, Model_eval):
         with tf.device('/cpu:0'):
             image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
-        with tf.variable_scope(tf.get_variable_scope()) as vs, tf.name_scope("model") as ns:
-            model = Model(image1, image2, image1r, image2r,
-                proj_cam2pix, proj_pix2cam, reuse_scope=False, scope=vs)
-            eval_model = Model_eval(scope=vs)
+        with tf.variable_scope(tf.get_variable_scope()) as vs:
+            with tf.name_scope("train_model") as ns:
+                model = Model(image1, image2, image1r, image2r,
+                    proj_cam2pix, proj_pix2cam, reuse_scope=False, scope=vs)
 
-            var_pose = list(
-                set(
-                    tf.get_collection(
-                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                        scope=".*pose_net.*")))
-            var_depth = list(
-                set(
-                    tf.get_collection(
-                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                        scope=".*(depth_net|feature_net_disp).*"
-                    )))
-            var_flow = list(
-                set(
-                    tf.get_collection(
-                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                        scope=".*(flow_net|feature_net_flow).*"
-                    )))
+                var_pose = list(
+                    set(
+                        tf.get_collection(
+                            tf.GraphKeys.TRAINABLE_VARIABLES,
+                            scope=".*pose_net.*")))
+                var_depth = list(
+                    set(
+                        tf.get_collection(
+                            tf.GraphKeys.TRAINABLE_VARIABLES,
+                            scope=".*(depth_net|feature_net_disp).*"
+                        )))
+                var_flow = list(
+                    set(
+                        tf.get_collection(
+                            tf.GraphKeys.TRAINABLE_VARIABLES,
+                            scope=".*(flow_net|feature_net_flow).*"
+                        )))
 
-            if opt.mode == "depthflow":
-                var_train_list = var_pose + var_depth + var_flow
-            elif opt.mode == "depth":
-                var_train_list = var_pose + var_depth
-            elif opt.mode == "flow":
-                var_train_list = var_flow
-            else:
-                var_train_list = var_depth
+                if opt.mode == "depthflow":
+                    var_train_list = var_pose + var_depth + var_flow
+                elif opt.mode == "depth":
+                    var_train_list = var_pose + var_depth
+                elif opt.mode == "flow":
+                    var_train_list = var_flow
+                else:
+                    var_train_list = var_depth
 
-            # VICTECH add regularization loss (why this is missed in original repo?)
-            loss = model.loss                        
-            reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-            # total_loss = loss + reg_loss (for now, turn off regularization)
-            total_loss = loss
+                # VICTECH add regularization loss (why this is missed in original repo?)
+                loss = model.loss                        
+                reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+                # total_loss = loss + reg_loss (for now, turn off regularization)
+                total_loss = loss
 
-            summaries_additional = [tf.summary.scalar("reg_loss", reg_loss)]
-            grads = train_op.compute_gradients(
-                total_loss, var_list=var_train_list)
+                tf.summary.scalar('reg_loss', reg_loss)
+                tf.summary.scalar('total_loss', total_loss)
 
-        # Apply the gradients to adjust the shared variables.
-        apply_gradient_op = train_op.apply_gradients(grads, global_step=global_step)
+                grads = train_op.compute_gradients(
+                    total_loss, var_list=var_train_list)
+
+                # Apply the gradients to adjust the shared variables.
+                apply_gradient_op = train_op.apply_gradients(grads, global_step=global_step)
+
+            with tf.name_scope("eval_model") as ns:
+                eval_model = Model_eval(scope=vs)
 
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
-
-        # Build the summary operation from the last tower summaries.
-        summary_op = tf.summary.merge(summaries_additional)
 
         # Make training session.
         config = tf.ConfigProto()
@@ -88,6 +90,9 @@ def train(Model, Model_eval):
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 
+        # Build the summary operation from the last tower summaries.
+        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope="train_model")
+        summary_op = tf.summary.merge(summaries)
         summary_writer = tf.summary.FileWriter(
             opt.trace, graph=sess.graph, flush_secs=10)
 
@@ -133,13 +138,11 @@ def train(Model, Model_eval):
         # Run training.
         for itr in trange(start_itr, opt.num_iterations, ncols=None):
             if opt.train_test == "train":
-                _, summary_str, summary_model_str = sess.run(
-                    [apply_gradient_op, summary_op, model.summ_op])
+                _, summary_str = sess.run(
+                    [apply_gradient_op, summary_op])
 
-                # VICTECH note we are not getting image summaries like original repo
                 if (itr) % (SUMMARY_INTERVAL) == 2:
                     summary_writer.add_summary(summary_str, itr)
-                    summary_writer.add_summary(summary_model_str, itr)
 
                 if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                     saver.save(

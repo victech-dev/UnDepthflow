@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.python.platform import flags
 
 from nets.pose_net import pose_exp_net
-from monodepth_model import disp_godard, disp_godard2
+from monodepth_model import disp_godard
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
 from nets.pwc_disp import feature_pyramid_disp
 from optical_flow_warp_fwd import transformerFwd
@@ -28,26 +28,17 @@ class Model_stereo(object):
                  pix2cam=None,
                  reuse_scope=False,
                  scope=None):
-        summaries = []
 
         with tf.variable_scope(scope, reuse=reuse_scope):
             feature1_disp = feature_pyramid_disp(image1, reuse=False)
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
 
-            stereo_model = disp_godard2(image1, image1r,
+            pred_disp, stereo_smooth_loss = disp_godard(image1, image1r,
                 feature1_disp, feature1r_disp, opt, is_training=True)
-            pred_disp = [stereo_model.disp1, stereo_model.disp2, stereo_model.disp3, stereo_model.disp4]
 
             pred_depth = [1. / d for d in pred_disp]
 
-        self.loss = stereo_model.total_loss
-
-        summaries.append(tf.summary.scalar("total_loss", self.loss))
-
-        #DEBUG!! smoothness loss
-        summaries.append(
-            tf.summary.scalar('disp_gradient_loss', stereo_model.disp_gradient_loss))
-        #DEBUG!! smoothness loss
+        self.loss = stereo_smooth_loss
 
         # VICTECH disable this for training performance
         # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
@@ -56,8 +47,6 @@ class Model_stereo(object):
         #                  pred_depth[s][:, :, :, 0:1])
         # tf.summary.image('scale%d_right_disparity_image' % s,
         #                  pred_disp[s][:, :, :, 1:2])
-
-        self.summ_op = tf.summary.merge(summaries)
 
 
 class Model_eval_stereo(object):
