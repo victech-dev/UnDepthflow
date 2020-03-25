@@ -27,9 +27,7 @@ def train(Model, Model_eval):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.train.AdamOptimizer(opt.learning_rate)
-
-        with tf.device('/cpu:0'):
-            image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
+        image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("train_model") as ns:
