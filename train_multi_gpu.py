@@ -2,13 +2,15 @@ import tensorflow as tf
 
 from tensorflow.python.platform import flags
 
-from monodepth_dataloader import MonodepthDataloader
+from monodepth_dataloader_v2 import batch_from_dataset
 
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
 
 from test import test
+from tqdm import trange
+import sys
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -25,11 +27,7 @@ def train(Model, Model_eval):
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.train.AdamOptimizer(opt.learning_rate)
-
-        tower_grads = []
-
-        image1, image_r, image2, image2_r, proj_cam2pix, proj_pix2cam = MonodepthDataloader(
-            opt).data_batch
+        image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         split_image1 = tf.split(
             axis=0, num_or_size_splits=opt.num_gpus, value=image1)
@@ -40,20 +38,15 @@ def train(Model, Model_eval):
         split_pix2cam = tf.split(
             axis=0, num_or_size_splits=opt.num_gpus, value=proj_pix2cam)
         split_image_r = tf.split(
-            axis=0, num_or_size_splits=opt.num_gpus, value=image_r)
+            axis=0, num_or_size_splits=opt.num_gpus, value=image1r)
         split_image_r_next = tf.split(
-            axis=0, num_or_size_splits=opt.num_gpus, value=image2_r)
+            axis=0, num_or_size_splits=opt.num_gpus, value=image2r)
 
-        summaries_cpu = tf.get_collection(tf.GraphKeys.SUMMARIES,
-                                          tf.get_variable_scope().name)
-
+        tower_grads = []
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             for i in range(opt.num_gpus):
-                with tf.device('/gpu:%d' % i):
-                    if i == opt.num_gpus - 1:
-                        scopename = "model"
-                    else:
-                        scopename = '%s_%d' % ("tower", i)
+                with tf.device(f'/gpu:{i}'):
+                    scopename = "train_model" if i == 0 else f'tower_{i}'
                     with tf.name_scope(scopename) as ns:
                         if i == 0:
                             model = Model(
@@ -104,17 +97,19 @@ def train(Model, Model_eval):
                                 scope=vs)
 
                         # VICTECH add regularization loss (why this is missed in original repo?)
-                        loss = model.loss                        
-                        reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-                        total_loss = loss + reg_loss
+                        loss = model.loss
+                        reg_loss = tf.math.add_n(
+                            tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES, scope=scopename))
+
                         # Retain the summaries from the final tower.
                         if i == opt.num_gpus - 1:
-                            summaries_additional = [tf.summary.scalar("reg_loss", reg_loss)]
+                            tf.summary.scalar('reg_loss', reg_loss)
+                            tf.summary.scalar('total_loss', loss)
+                            summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope=scopename)
                             eval_model = Model_eval(scope=vs)
-                        # Calculate the gradients for the batch of data on this CIFAR tower.
-                        grads = train_op.compute_gradients(
-                            total_loss, var_list=var_train_list)
 
+                        # Calculate the gradients for the batch of data on this CIFAR tower.
+                        grads = train_op.compute_gradients(loss, var_list=var_train_list)
                         # Keep track of the gradients across all towers.
                         tower_grads.append(grads)
 
@@ -129,9 +124,6 @@ def train(Model, Model_eval):
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
 
-        # Build the summary operation from the last tower summaries.
-        summary_op = tf.summary.merge(summaries_additional + summaries_cpu)
-
         # Make training session.
         config = tf.ConfigProto()
         config.allow_soft_placement = True
@@ -139,6 +131,7 @@ def train(Model, Model_eval):
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 
+        summary_op = tf.summary.merge(summaries)
         summary_writer = tf.summary.FileWriter(
             opt.trace, graph=sess.graph, flush_secs=10)
 
@@ -172,7 +165,6 @@ def train(Model, Model_eval):
                 sess.run(global_step.assign(0))
 
         start_itr = global_step.eval(session=sess)
-        tf.train.start_queue_runners(sess)
 
         if opt.eval_flow:
             gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
@@ -183,24 +175,19 @@ def train(Model, Model_eval):
               None, None, None, None, None
 
         # Run training.
-        for itr in range(start_itr, opt.num_iterations):
+        for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
             if opt.train_test == "train":
-                _, summary_str, summary_model_str = sess.run(
-                    [apply_gradient_op, summary_op, model.summ_op])
+                _, summary_str = sess.run([apply_gradient_op, summary_op])
 
-                # VICTECH note we are not getting image summaries like original repo
                 if (itr) % (SUMMARY_INTERVAL) == 2:
                     summary_writer.add_summary(summary_str, itr)
-                    summary_writer.add_summary(summary_model_str, itr)
 
                 if (itr) % (SAVE_INTERVAL) == 2:
                     saver.save(
                         sess, opt.trace + '/model', global_step=global_step)
 
-            print('*** Iteration done:', itr)
-            # VICTECH turn off evaluation during training by default
-            # if (itr) % (VAL_INTERVAL) == 2 or opt.train_test == "test":
-            #     test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-            #          gt_flows_2015, noc_masks_2015, gt_masks)
+            if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
+                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
+                     gt_flows_2015, noc_masks_2015, gt_masks)
 
 

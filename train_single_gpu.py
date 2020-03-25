@@ -137,8 +137,7 @@ def train(Model, Model_eval):
         # Run training.
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
             if opt.train_test == "train":
-                _, summary_str = sess.run(
-                    [apply_gradient_op, summary_op])
+                _, summary_str = sess.run([apply_gradient_op, summary_op])
 
                 if (itr) % (SUMMARY_INTERVAL) == 2:
                     summary_writer.add_summary(summary_str, itr)
