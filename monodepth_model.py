@@ -22,6 +22,10 @@ from nets.pwc_disp import pwc_disp
 from core_warp import inv_warp_flow
 from optical_flow_warp_fwd import transformerFwd
 
+#DEBUG!!!!
+from tensorflow.python.platform import flags
+FLAGS = flags.FLAGS
+#DEBUG!!!!
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -118,37 +122,24 @@ class MonodepthModel(object):
 
         return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
 
+    ''' undepthflow (with disp norm, index bug fixed) '''
     def get_disparity_smoothness_2nd(self, disp, pyramid):
-        disp_gradients_x = [self.gradient_x(d) for d in disp]
-        disp_gradients_y = [self.gradient_y(d) for d in disp]
+        disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
+        disp = [d / m for d, m in zip(disp, disp_mean)]
 
-        disp_gradients_xx = [self.gradient_x(dg) for dg in disp_gradients_x]
-        disp_gradients_yy = [self.gradient_y(dg) for dg in disp_gradients_y]
+        disp_gradients = [tf.stack(tf.image.image_gradients(d), axis=-1) for d in disp]
+        disp_gradients = [tf.squeeze(g, axis=3) for g in disp_gradients] # [B,H,W,1,2] -> [B,H,W,2]        
+        disp_yy = [tf.image.image_gradients(g[:,:,:,0:1])[0] for g in disp_gradients]
+        disp_xx = [tf.image.image_gradients(g[:,:,:,1:2])[1] for g in disp_gradients]
+        disp_2nd = [tf.concat([tf.roll(yy, 1, axis=1), tf.roll(xx, 1, axis=2)], axis=-1) for yy, xx in zip(disp_yy, disp_xx)]
 
-        image_gradients_x = [self.gradient_x(img) for img in pyramid]
-        image_gradients_y = [self.gradient_y(img) for img in pyramid]
-
-        weights_x = [
-            tf.exp(-tf.reduce_mean(
-                10.0 * tf.abs(g), 3, keep_dims=True))
-            for g in image_gradients_x
-        ]
-        weights_y = [
-            tf.exp(-tf.reduce_mean(
-                10.0 * tf.abs(g), 3, keep_dims=True))
-            for g in image_gradients_y
-        ]
-
-        smoothness_x = [
-            disp_gradients_xx[i] * weights_x[i][:, :, :-1, :] for i in range(4)
-        ]
-        smoothness_y = [
-            disp_gradients_yy[i] * weights_y[i][:, :-1, :, :] for i in range(4)
-        ]
-        return smoothness_x + smoothness_y
+        image_gradients = [tf.stack(tf.image.image_gradients(img), axis=-1) for img in pyramid]
+        weights = [tf.exp(-10*tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients]
+        weights = [tf.squeeze(w, axis=3) for w in weights] # [B,H,W,1,2] -> [B,H,W,2]
+        return [v*w for v, w in zip(disp_2nd, weights)]
 
     ''' monodepth2 version (with disp norm) '''
-    def get_disparity_smoothness_v2(self, disp, pyramid):
+    def get_disparity_smoothness_monodepth2(self, disp, pyramid):
         disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
         disp = [d / m for d, m in zip(disp, disp_mean)]
         # same as monodepth, index bug fixed
@@ -159,7 +150,7 @@ class MonodepthModel(object):
         return [v*w for v, w in zip(disp_gradients, weights)]
 
     ''' depth smoothness version of undepthflow (with disp norm) '''
-    def get_disparity_smoothness_v3(self, disp, pyramid):
+    def get_disparity_smoothness_2nd_v2(self, disp, pyramid):
         def _IyIx_abs(img):
             # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
             rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
@@ -475,10 +466,21 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = self.get_disparity_smoothness_v3(
-                self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = self.get_disparity_smoothness_v3(
-                self.disp_right_est, self.right_pyramid)
+            if FLAGS.smooth_mode == 'monodepth2':
+                self.disp_left_smoothness = self.get_disparity_smoothness_monodepth2(
+                    self.disp_left_est, self.left_pyramid)
+                self.disp_right_smoothness = self.get_disparity_smoothness_monodepth2(
+                    self.disp_right_est, self.right_pyramid)
+            elif FLAGS.smooth_mode == 'undepthflow':
+                self.disp_left_smoothness = self.get_disparity_smoothness_2nd(
+                    self.disp_left_est, self.left_pyramid)
+                self.disp_right_smoothness = self.get_disparity_smoothness_2nd(
+                    self.disp_right_est, self.right_pyramid)
+            elif FLAGS.smooth_mode == 'undepthflow_v2':
+                self.disp_left_smoothness = self.get_disparity_smoothness_2nd_v2(
+                    self.disp_left_est, self.left_pyramid)
+                self.disp_right_smoothness = self.get_disparity_smoothness_2nd_v2(
+                    self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
@@ -551,9 +553,7 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            #DEBUG!!!! 적당한 self.params.disp_gradient_loss_weight 이 값을 찾아봅시다
-            #self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
-            self.total_loss = self.image_loss + 0.001 * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss            
+            self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
 
     def build_summaries(self):
         # SUMMARIES

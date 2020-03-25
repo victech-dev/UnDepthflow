@@ -67,6 +67,8 @@ flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
 
 flags.DEFINE_float("depth_smooth_weight", 10.0, "Weight for depth smoothness")
+flags.DEFINE_string("smooth_mode", 'monodepth2', "monodepth2 or undepthflow_v2")
+
 flags.DEFINE_float("ssim_weight", 0.85,
                    "Weight for using ssim loss in pixel loss")
 flags.DEFINE_float("flow_smooth_weight", 10.0, "Weight for flow smoothness")
@@ -85,11 +87,17 @@ opt = FLAGS
 def main(unused_argv):
     #VICTECH train
     from autoflags import autoflags
-    Model, Model_eval = autoflags(opt, 'depthflow', True)
-    opt.trace = './results_depthflow'
+    Model, Model_eval = autoflags(opt, 'stereo', True)
+    opt.trace = './results_stereo'
     opt.train_test = 'train'
     opt.retrain = True
     opt.weight_decay = 0.0001
+    #DEBUG!!!
+    if opt.smooth_mode == 'monodepth2' or opt.smooth_mode == 'undepthflow' or opt.smooth_mode == 'undepthflow_v2':
+        print('*** Smooth mode:', opt.smooth_mode, opt.depth_smooth_weight)
+    else:
+        raise Exception("Invalid smooth mode")
+    #DEBUG!!!
     #VICTECH
 
     if FLAGS.trace == "":
