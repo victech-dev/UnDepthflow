@@ -96,22 +96,20 @@ def train(Model, Model_eval):
                                 reuse_scope=True,
                                 scope=vs)
 
-                        # VICTECH add regularization loss (why this is missed in original repo?)
-                        loss = model.loss
-                        reg_loss = tf.math.add_n(
-                            tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES, scope=scopename))
-
                         # Retain the summaries from the final tower.
                         if i == opt.num_gpus - 1:
+                            reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
                             tf.summary.scalar('reg_loss', reg_loss)
-                            tf.summary.scalar('total_loss', loss)
+                            tf.summary.scalar('total_loss', model.loss)
                             summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope=scopename)
                             eval_model = Model_eval(scope=vs)
 
                         # Calculate the gradients for the batch of data on this CIFAR tower.
-                        grads = train_op.compute_gradients(loss, var_list=var_train_list)
+                        grads = train_op.compute_gradients(model.loss, var_list=var_train_list)
                         # Keep track of the gradients across all towers.
                         tower_grads.append(grads)
+
+                    print(' - Model created:', scopename)
 
         grads = average_gradients(tower_grads)
 
