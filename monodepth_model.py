@@ -118,37 +118,6 @@ class MonodepthModel(object):
 
         return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
 
-    def get_disparity_smoothness(self, disp, pyramid):
-        disp_gradients_x = [self.gradient_x(d) for d in disp]
-        disp_gradients_y = [self.gradient_y(d) for d in disp]
-
-        image_gradients_x = [self.gradient_x(img) for img in pyramid]
-        image_gradients_y = [self.gradient_y(img) for img in pyramid]
-
-        weights_x = [
-            tf.exp(-tf.reduce_mean(
-                tf.abs(g), 3, keep_dims=True)) for g in image_gradients_x
-        ]
-        weights_y = [
-            tf.exp(-tf.reduce_mean(
-                tf.abs(g), 3, keep_dims=True)) for g in image_gradients_y
-        ]
-
-        smoothness_x = [disp_gradients_x[i] * weights_x[i] for i in range(4)]
-        smoothness_y = [disp_gradients_y[i] * weights_y[i] for i in range(4)]
-        # return smoothness_x + smoothness_y
-        smoothness_x = [tf.reshape(s, (self.params.batch_size, -1)) for s in smoothness_x]
-        smoothness_y = [tf.reshape(s, (self.params.batch_size, -1)) for s in smoothness_y]
-        return [tf.concat([smoothness_x[i], smoothness_y[i]], axis=-1) for i in range(4)]
-
-    def get_disparity_smoothness_v3(self, disp, pyramid):
-        # same as monodepth, index bug fixed
-        disp_gradients = [tf.stack(tf.image.image_gradients(d), axis=-1) for d in disp]
-        image_gradients = [tf.stack(tf.image.image_gradients(img), axis=-1) for img in pyramid]
-        weights = [tf.exp(-tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients]
-        # [batch, height, width, 1, 2]
-        return [v*w for v, w in zip(disp_gradients, weights)]
-
     def get_disparity_smoothness_2nd(self, disp, pyramid):
         disp_gradients_x = [self.gradient_x(d) for d in disp]
         disp_gradients_y = [self.gradient_y(d) for d in disp]
@@ -178,31 +147,43 @@ class MonodepthModel(object):
         ]
         return smoothness_x + smoothness_y
 
+    ''' monodepth2 version (with disp norm) '''
     def get_disparity_smoothness_v2(self, disp, pyramid):
-        def _IyyIxx_abs(gray):
-            fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
-            filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
-            i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
-            ret = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
-            return tf.abs(ret) # [batch, height, width, (dyy,dxx)]
+        disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
+        disp = [d / m for d, m in zip(disp, disp_mean)]
+        # same as monodepth, index bug fixed
+        disp_gradients = [tf.stack(tf.image.image_gradients(d), axis=-1) for d in disp]
+        image_gradients = [tf.stack(tf.image.image_gradients(img), axis=-1) for img in pyramid]
+        weights = [tf.exp(-tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients]
+        # [batch, height, width, 1, 2]
+        return [v*w for v, w in zip(disp_gradients, weights)]
 
+    ''' depth smoothness version of undepthflow (with disp norm) '''
+    def get_disparity_smoothness_v3(self, disp, pyramid):
         def _IyIx_abs(img):
-            # x10 scale compared to vanila gradient
+            # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
             rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
             sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
             sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
             sobel_abs = tf.abs(sobel_weighted)
             return tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (dy,dx)]
 
-        disp_norm = [d / tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
-        disp_grad2 = [_IyyIxx_abs(d) for d in disp_norm]
+        def _IyyIxx_abs(gray):
+            # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
+            fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
+            filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
+            i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
+            ret = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
+            return tf.abs(ret) # [batch, height, width, (dyy,dxx)]
+
+        depth = [1.0 / (d+1e-3) for d in disp]
+        depth_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in depth]
+        depth = [d / m for d, m in zip(depth, depth_mean)]    
+        depth_grad2 = [_IyyIxx_abs(d) for d in depth]
         image_grad = [_IyIx_abs(img) for img in pyramid]
         weights = [tf.exp(-1.0 * g) for g in image_grad]
-        smoothness = [
-            tf.reduce_sum(v*w, axis=-1, keepdims=True)
-            for v, w in zip(disp_grad2, weights)
-        ]
-        return smoothness
+        smoothness = [v*w for v, w in zip(depth_grad2, weights)]
+        return smoothness # [batch, height, width, 2]
 
     def get_disp(self, x):
         disp = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
@@ -570,7 +551,9 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
+            #DEBUG!!!! 적당한 self.params.disp_gradient_loss_weight 이 값을 찾아봅시다
+            #self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
+            self.total_loss = self.image_loss + 0.001 * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss            
 
     def build_summaries(self):
         # SUMMARIES
