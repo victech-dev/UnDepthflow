@@ -546,13 +546,12 @@ class MonodepthModel(object):
                 (1 - self.params.alpha_image_loss
                  ) * self.l1_reconstruction_loss_left[i] for i in range(4)
             ]
-            self.image_loss = tf.add_n(self.image_loss_left +
-                                       self.image_loss_right)
+            self.image_loss = tf.add_n(self.image_loss_left + self.image_loss_right)
 
             # DISPARITY SMOOTHNESS
             self.disp_left_loss = [tf.reduce_mean(tf.abs(s)) for s in self.disp_left_smoothness]
             self.disp_right_loss = [tf.reduce_mean(tf.abs(s)) for s in self.disp_right_smoothness]
-            self.disp_gradient_loss = tf.add_n(self.disp_left_loss + self.disp_right_loss) * 0.5
+            self.disp_gradient_loss = tf.add_n(self.disp_left_loss + self.disp_right_loss)
 
             # LR CONSISTENCY
             self.lr_left_loss  = [tf.reduce_mean(tf.abs(self.right_to_left_disp[i] - self.disp_left_est[i])*self.left_occ_mask[i]) / \
