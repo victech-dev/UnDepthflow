@@ -210,28 +210,44 @@ def transformerFwd(U,
         return output
 
 
-def main(unused_argv):
-    # Some test cases
-    sess = tf.Session(config=tf.ConfigProto(
-        allow_soft_placement=True, log_device_placement=False))
-    #   
-    image = tf.constant(range(16), shape=[1, 4, 4, 1], dtype="float32")
-
-    flo = np.zeros((1, 4, 4, 2))
-    flo[0, 1, 1, 0] = 1.0
-    flo = tf.constant(flo, dtype="float32")
-
-    image2 = transformerFwd(image, flo, [4, 4])
-
-    image2 = sess.run(image2)
-    loss = tf.reduce_mean(tf.abs(image2 - 1.0))
-
-    var_grad = tf.gradients(loss, [flo])[0]
-
-    sess.run(tf.global_variables_initializer())
-    print(image2.eval(session=sess))
-    pdb.set_trace()
-
-
 if __name__ == '__main__':
-    app.run()
+    # # Some test cases
+    # sess = tf.Session(config=tf.ConfigProto(
+    #     allow_soft_placement=True, log_device_placement=False))
+    # #   
+    # image = tf.constant(range(16), shape=[1, 4, 4, 1], dtype="float32")
+
+    # flo = np.zeros((1, 4, 4, 2))
+    # flo[0, 1, 1, 0] = 1.0
+    # flo = tf.constant(flo, dtype="float32")
+
+    # image2 = transformerFwd(image, flo, [4, 4])
+
+    # image2 = sess.run(image2)
+    # loss = tf.reduce_mean(tf.abs(image2 - 1.0))
+
+    # var_grad = tf.gradients(loss, [flo])[0]
+
+    # sess.run(tf.global_variables_initializer())
+    # print(image2.eval(session=sess))
+    # pdb.set_trace()
+    import numpy as np
+    tf.enable_eager_execution()
+
+    # params = destination pixel position
+    # indices = image
+    tf.scatter_nd([tf.expand_dims(idx_a, -1), im_flat*wa, shape)
+
+    image = tf.constant(
+        [[0, 1, 2, 3, 4]]*2, shape=[1, 2, 5, 1], dtype="float32")
+    print("*** Image:", tf.squeeze(image))
+
+    flo_x = np.array([[2,3,1,-2,-4]]*2, dtype=np.float32).reshape(1,2,5,1)
+    flo_y = np.zeros_like(flo_x)
+    flo = np.concatenate([flo_x, flo_y], axis=-1)
+    flo = tf.convert_to_tensor(flo)
+
+    # output should be [[1,2,3],[4,6,6],[7,8,9]]
+    image2 = transformerFwd(image, flo, [2,5], backprop=True)
+    print("*** Image:", tf.squeeze(image2))
+
