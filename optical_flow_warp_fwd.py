@@ -234,10 +234,6 @@ if __name__ == '__main__':
     import numpy as np
     tf.enable_eager_execution()
 
-    # params = destination pixel position
-    # indices = image
-    tf.scatter_nd([tf.expand_dims(idx_a, -1), im_flat*wa, shape)
-
     image = tf.constant(
         [[0, 1, 2, 3, 4]]*2, shape=[1, 2, 5, 1], dtype="float32")
     print("*** Image:", tf.squeeze(image))
