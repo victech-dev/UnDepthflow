@@ -39,6 +39,7 @@ flags.DEFINE_integer("img_width", 832, "Image width")
 flags.DEFINE_float('weight_decay', 0.0004, 'scale of l2 regularization')
 
 flags.DEFINE_float("depth_smooth_weight", 10.0, "Weight for depth smoothness")
+flags.DEFINE_string("smooth_mode", 'monodepth2', "monodepth2 or undepthflow_v2")
 flags.DEFINE_float("ssim_weight", 0.85,
                    "Weight for using ssim loss in pixel loss")
 flags.DEFINE_float("flow_smooth_weight", 10.0, "Weight for flow smoothness")
@@ -165,9 +166,9 @@ def main(unused_argv):
     #VICTECH test
     from autoflags import autoflags
     Model, Model_eval = autoflags(opt, 'stereo', True)
-    opt.pretrained_model = './results_original/model-stereo'
-    # opt.pretrained_model = './results_depth/model-297503'
-    # opt.pretrained_model = './results_depthflow/model-297503'
+    opt.pretrained_model = '.results_original/model-stereo'
+    # opt.pretrained_model = '.results_original/model-depth'
+    # opt.pretrained_model = '.results_original/model-depthflow'
     #VICTECH
 
     print('Constructing models and inputs.')

@@ -81,7 +81,7 @@ def main(unused_argv):
     #VICTECH train
     from autoflags import autoflags
     Model, Model_eval = autoflags(opt, 'stereo', True)
-    opt.trace = './results_stereo'
+    opt.trace = '.results_stereo'
     opt.train_test = 'train'
     opt.retrain = True
     opt.weight_decay = 0.0001
