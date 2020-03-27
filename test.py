@@ -16,9 +16,20 @@ import sys
 from tensorflow.python.platform import flags
 opt = flags.FLAGS
 
+def _parse_to_dict(result):
+    # parse string 'name1,name2,...\nvalue1,value2,...' to dict of {name1:value1, name2:value2, ...}
+    lines = list(filter(None, result.splitlines()))
+    if len(lines) != 2:
+        raise Exception('Cannot parse text to k,v pairs')
+    keys = lines[0].replace(',', ' ').split()
+    values = lines[1].replace(',', ' ').split()
+    if len(keys) != len(values):
+        raise Exception('Cannot parse text to k,v pairs')
+    return dict([(k,float(v)) for k,v in zip(keys, values)])
 
 def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
          noc_masks_2015, gt_masks):
+    summaries = {}
     with tf.name_scope("evaluation"):
         sys.stderr.write("Evaluation at iter [" + str(itr) + "]: \n")
         if opt.eval_pose != "":
@@ -48,26 +59,18 @@ def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
                 img1_dir, img2_dir, calib_dir = "image_2", "image_3", 'calib_cam_to_cam'
 
             for i in range(total_img_num):
-                img1 = imgtool.imread(
-                    os.path.join(gt_dir, img1_dir,
-                                 str(i).zfill(6) + "_10.png"))
+                img1 = imgtool.imread(os.path.join(gt_dir, img1_dir, f'{i:06}_10.png'))
                 img1_orig = img1
                 orig_H, orig_W = img1.shape[0:2]
                 img1 = imgtool.imresize(img1, (opt.img_height, opt.img_width))
 
-                img2 = imgtool.imread(
-                    os.path.join(gt_dir, img1_dir,
-                                 str(i).zfill(6) + "_11.png"))
+                img2 = imgtool.imread(os.path.join(gt_dir, img1_dir, f'{i:06}_11.png'))
                 img2 = imgtool.imresize(img2, (opt.img_height, opt.img_width))
 
-                imgr = imgtool.imread(
-                    os.path.join(gt_dir, img2_dir,
-                                 str(i).zfill(6) + "_10.png"))
+                imgr = imgtool.imread(os.path.join(gt_dir, img2_dir, f'{i:06}_10.png'))
                 imgr = imgtool.imresize(imgr, (opt.img_height, opt.img_width))
 
-                img2r = imgtool.imread(
-                    os.path.join(gt_dir, img2_dir,
-                                 str(i).zfill(6) + "_11.png"))
+                img2r = imgtool.imread(os.path.join(gt_dir, img2_dir, f'{i:06}_11.png'))
                 img2r = imgtool.imresize(img2r, (opt.img_height, opt.img_width))
 
                 img1 = np.expand_dims(img1, axis=0)
@@ -109,71 +112,50 @@ def test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015,
                     test_result_disp, gt_dir, eval_occ=True)
                 abs_rel, sq_rel, rms, log_rms, a1, a2, a3, d1_all = eval_depth(
                     gt_depths, pred_depths, gt_disparities, pred_disp_resized)
-                sys.stderr.write(
-                    "{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10} \n".
-                    format('abs_rel', 'sq_rel', 'rms', 'log_rms', 'd1_all',
-                           'a1', 'a2', 'a3'))
-                sys.stderr.write(
-                    "{:10.4f}, {:10.4f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f} \n".
-                    format(abs_rel, sq_rel, rms, log_rms, d1_all, a1, a2, a3))
+                depth_err = "{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10} \n". \
+                    format('abs_rel', 'sq_rel', 'rms', 'log_rms', 'd1_all', 'a1', 'a2', 'a3') + \
+                    "{:10.4f}, {:10.4f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f}, {:10.3f} \n". \
+                    format(abs_rel, sq_rel, rms, log_rms, d1_all, a1, a2, a3)
+                sys.stderr.write(depth_err); summaries['kitti_2015_depth'] = _parse_to_dict(depth_err)
 
-                disp_err = eval_disp_avg(
-                    test_result_disp,
-                    gt_dir,
-                    disp_num=0,
-                    moving_masks=gt_masks)
+                disp_err = eval_disp_avg(test_result_disp, gt_dir, disp_num=0, moving_masks=gt_masks)
                 sys.stderr.write("disp err 2015 is \n")
-                sys.stderr.write(disp_err + "\n")
+                sys.stderr.write(disp_err + "\n"); summaries['kitti_2015_disp'] = _parse_to_dict(disp_err)
 
                 if opt.mode == "depthflow":
-                    disp_err = eval_disp_avg(
-                        test_result_disp2,
-                        gt_dir,
-                        disp_num=1,
-                        moving_masks=gt_masks)
+                    disp_err = eval_disp_avg(test_result_disp2, gt_dir, disp_num=1, moving_masks=gt_masks)
                     sys.stderr.write("disp2 err 2015 is \n")
-                    sys.stderr.write(disp_err + "\n")
+                    sys.stderr.write(disp_err + "\n"); summaries['kitti_2015_disp2'] = _parse_to_dict(disp_err)
 
             if opt.eval_depth and eval_data == "kitti_2012":
                 disp_err = eval_disp_avg(test_result_disp, gt_dir)
                 sys.stderr.write("disp err 2012 is \n")
-                sys.stderr.write(disp_err + "\n")
+                sys.stderr.write(disp_err + "\n"); summaries['kitti_2012_disp'] = _parse_to_dict(disp_err)
 
             # flow evaluation
             if opt.eval_flow and eval_data == "kitti_2012":
                 if opt.mode in ["depth", "depthflow"]:
-                    epe = eval_flow_avg(gt_flows_2012, noc_masks_2012,
-                                        test_result_flow_rigid, opt)
+                    epe = eval_flow_avg(gt_flows_2012, noc_masks_2012, test_result_flow_rigid, opt)
                     sys.stderr.write("epe 2012 rigid is \n")
-                    sys.stderr.write(epe + "\n")
+                    sys.stderr.write(epe + "\n"); summaries['kitti_2012_flow_rigid'] = _parse_to_dict(epe)
 
-                epe = eval_flow_avg(gt_flows_2012, noc_masks_2012,
-                                    test_result_flow_optical, opt)
+                epe = eval_flow_avg(gt_flows_2012, noc_masks_2012, test_result_flow_optical, opt)
                 sys.stderr.write("epe 2012 optical is \n")
-                sys.stderr.write(epe + "\n")
+                sys.stderr.write(epe + "\n"); summaries['kitti_2012_flow_optical'] = _parse_to_dict(epe)
 
             if opt.eval_flow and eval_data == "kitti_2015":
                 if opt.mode in ["depth", "depthflow"]:
-                    epe = eval_flow_avg(
-                        gt_flows_2015,
-                        noc_masks_2015,
-                        test_result_flow_rigid,
-                        opt,
-                        moving_masks=gt_masks)
+                    epe = eval_flow_avg(gt_flows_2015, noc_masks_2015, test_result_flow_rigid, opt, moving_masks=gt_masks)
                     sys.stderr.write("epe 2015 rigid is \n")
-                    sys.stderr.write(epe + "\n")
+                    sys.stderr.write(epe + "\n"); summaries['kitti_2015_flow_rigid'] = _parse_to_dict(epe)
 
-                epe = eval_flow_avg(
-                    gt_flows_2015,
-                    noc_masks_2015,
-                    test_result_flow_optical,
-                    opt,
-                    moving_masks=gt_masks)
+                epe = eval_flow_avg(gt_flows_2015, noc_masks_2015, test_result_flow_optical, opt, moving_masks=gt_masks)
                 sys.stderr.write("epe 2015 optical is \n")
-                sys.stderr.write(epe + "\n")
+                sys.stderr.write(epe + "\n"); summaries['kitti_2015_flow_optical'] = _parse_to_dict(epe)
 
             # mask evaluation
             if opt.eval_mask and eval_data == "kitti_2015":
                 mask_err = eval_mask(test_result_mask, gt_masks, opt)
                 sys.stderr.write("mask_err is %s \n" % str(mask_err))
     sys.stderr.flush()
+    return summaries

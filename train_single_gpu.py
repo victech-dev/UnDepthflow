@@ -138,8 +138,12 @@ def train(Model, Model_eval):
                     saver.save(
                         sess, opt.trace + '/model', global_step=global_step)
 
+            # Evaluate and write to tensorboard
             if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
-                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-                     gt_flows_2015, noc_masks_2015, gt_masks)
-
-
+                result = test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
+                flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
+                summary = tf.Summary()
+                for k, v in flatten:
+                    summary.value.add(tag=k, simple_value=v)
+                summary_writer.add_summary(summary, itr)
+                summary_writer.flush()

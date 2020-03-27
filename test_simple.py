@@ -165,7 +165,7 @@ def main(unused_argv):
     #VICTECH test
     from autoflags import autoflags
     Model, Model_eval = autoflags(opt, 'stereo', True)
-    opt.pretrained_model = './results_stereo/model-297503'
+    opt.pretrained_model = './results_original/model-stereo'
     # opt.pretrained_model = './results_depth/model-297503'
     # opt.pretrained_model = './results_depthflow/model-297503'
     #VICTECH
