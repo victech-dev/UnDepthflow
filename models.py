@@ -131,9 +131,7 @@ class Model_flow(object):
             for s, flowr in enumerate(optical_flows_rev)
         ]
 
-        pixel_loss_depth = 0
         pixel_loss_optical = 0
-        exp_loss = 0
         flow_smooth_loss = 0
         tgt_image_all = []
         src_image_all = []
@@ -180,12 +178,11 @@ class Model_flow(object):
 
         self.loss = (pixel_loss_optical + flow_smooth_loss)
 
-        summaries.append(tf.summary.scalar("total_loss", self.loss))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_depth", pixel_loss_depth))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_optical", pixel_loss_optical))
-        summaries.append(tf.summary.scalar("exp_loss", exp_loss))
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'flow_losses/.*'):
+            with tf.name_scope('flow_losses/'):
+                tf.summary.scalar("pixel_loss_optical", pixel_loss_optical)
+                tf.summary.scalar("flow_smooth_loss", flow_smooth_loss)
+
         # VICTECH disable this for training performance
         # tf.summary.image('scale%d_target_image' % s, \
         #                  deprocess_image(tgt_image_all[s]))
@@ -196,9 +193,6 @@ class Model_flow(object):
         #                  deprocess_image(proj_image_depth_all[s]))
         # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
         # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
-
-        self.summ_op = tf.summary.merge(summaries)
-
 
 class Model_eval_flow(object):
     def __init__(self, scope=None):
@@ -295,9 +289,6 @@ class Model_depth(object):
         ]
 
         pixel_loss_depth = 0
-        pixel_loss_optical = 0
-        exp_loss = 0
-        flow_smooth_loss = 0
         tgt_image_all = []
         src_image_all = []
         proj_image_depth_all = []
@@ -346,14 +337,10 @@ class Model_depth(object):
 
         self.loss = (10.0 * pixel_loss_depth + stereo_smooth_loss)
 
-        summaries.append(tf.summary.scalar("total_loss", self.loss))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_depth", pixel_loss_depth))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_optical", pixel_loss_optical))
-        summaries.append(tf.summary.scalar("exp_loss", exp_loss))
-        summaries.append(
-            tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):
+            with tf.name_scope('depth_losses/'):
+                tf.summary.scalar("pixel_loss_depth", pixel_loss_depth)
+                tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss)
 
         # VICTECH disable this for training performance
         # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
@@ -374,7 +361,6 @@ class Model_depth(object):
         #                  deprocess_image(proj_image_depth_all[s]))
         # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
         # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
-        self.summ_op = tf.summary.merge(summaries)
 
 
 class Model_eval_depth(object):
@@ -513,7 +499,6 @@ class Model_depthflow(object):
 
         pixel_loss_depth = 0
         pixel_loss_optical = 0
-        exp_loss = 0
         flow_smooth_loss = 0
         flow_consist_loss = 0
         tgt_image_all = []
@@ -612,14 +597,16 @@ class Model_depthflow(object):
             3.0 * pixel_loss_depth + stereo_smooth_loss
         ) + pixel_loss_optical + flow_smooth_loss + flow_consist_loss
 
-        summaries.append(tf.summary.scalar("total_loss", self.loss))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_depth", pixel_loss_depth))
-        summaries.append(
-            tf.summary.scalar("pixel_loss_optical", pixel_loss_optical))
-        summaries.append(tf.summary.scalar("exp_loss", exp_loss))
-        summaries.append(
-            tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss))
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):
+            with tf.name_scope('depth_losses/'):
+                tf.summary.scalar("pixel_loss_depth", pixel_loss_depth)
+                tf.summary.scalar("stereo_smooth_loss", stereo_smooth_loss)
+
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'flow_losses/.*'):
+            with tf.name_scope('flow_losses/'):
+                tf.summary.scalar("pixel_loss_optical", pixel_loss_optical)
+                tf.summary.scalar("flow_smooth_loss", flow_smooth_loss)
+                tf.summary.scalar("flow_consist_loss", flow_consist_loss)
 
         # VICTECH disable this for training performance
         # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
@@ -639,7 +626,6 @@ class Model_depthflow(object):
         #                  deprocess_image(proj_image_depth_all[s]))
         # tf.summary.image('scale_proj_error_error', proj_error_depth_all[s])
         # tf.summary.image('scale_flyout_mask', flyout_map_all[s])
-        self.summ_op = tf.summary.merge(summaries)
 
 
 class Model_eval_depthflow(object):

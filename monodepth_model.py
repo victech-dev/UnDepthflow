@@ -55,7 +55,12 @@ class MonodepthModel(object):
 
         self.build_losses()
 
-        self.build_summaries()     
+        # Create summaries once when multiple models are created in multiple gpu
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
+            with tf.name_scope('stereo_losses/'):
+                tf.summary.scalar('image_loss', self.image_loss)
+                tf.summary.scalar('disp_gradient_loss', self.disp_gradient_loss)
+                tf.summary.scalar('lr_loss', self.lr_loss)
 
     def scale_pyramid(self, img, num_scales):
         scaled_imgs = [img]
@@ -353,85 +358,77 @@ class MonodepthModel(object):
             self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
 
     def build_summaries(self):
-        # Create summaries once when multiple models are created in multiple gpu
-        if tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
-            return
-        with tf.name_scope('stereo_losses/'):
-            tf.summary.scalar('image_loss', self.image_loss)
-            tf.summary.scalar('disp_gradient_loss', self.disp_gradient_loss)
-            tf.summary.scalar('lr_loss', self.lr_loss)
+        # SUMMARIES
+        with tf.device('/cpu:0'):
+            for i in range(4):
+                tf.summary.scalar(
+                    'ssim_loss_' + str(i),
+                    self.ssim_loss_left[i] + self.ssim_loss_right[i])
+                tf.summary.scalar(
+                    'l1_loss_' + str(i),
+                    self.l1_reconstruction_loss_left[i] +
+                    self.l1_reconstruction_loss_right[i])
+                tf.summary.scalar(
+                    'image_loss_' + str(i),
+                    self.image_loss_left[i] + self.image_loss_right[i])
+                tf.summary.scalar(
+                    'disp_gradient_loss_' + str(i),
+                    self.disp_left_loss[i] + self.disp_right_loss[i])
+                tf.summary.scalar(
+                    'lr_loss_' + str(i),
+                    self.lr_left_loss[i] + self.lr_right_loss[i])
+                tf.summary.image(
+                    'disp_left_est_' + str(i),
+                    self.disp_left_est[i],
+                    max_outputs=4)
+                tf.summary.image(
+                    'disp_right_est_' + str(i),
+                    self.disp_right_est[i],
+                    max_outputs=4)
+                tf.summary.image(
+                    'occ_left_est_' + str(i),
+                    self.left_occ_mask[i],
+                    max_outputs=4)
+                tf.summary.image(
+                    'occ_right_est_' + str(i),
+                    self.right_occ_mask[i],
+                    max_outputs=4)
 
-        # # SUMMARIES
-        # with tf.device('/cpu:0'):
-        #     for i in range(4):
-        #         tf.summary.scalar(
-        #             'ssim_loss_' + str(i),
-        #             self.ssim_loss_left[i] + self.ssim_loss_right[i])
-        #         tf.summary.scalar(
-        #             'l1_loss_' + str(i),
-        #             self.l1_reconstruction_loss_left[i] +
-        #             self.l1_reconstruction_loss_right[i])
-        #         tf.summary.scalar(
-        #             'image_loss_' + str(i),
-        #             self.image_loss_left[i] + self.image_loss_right[i])
-        #         tf.summary.scalar(
-        #             'disp_gradient_loss_' + str(i),
-        #             self.disp_left_loss[i] + self.disp_right_loss[i])
-        #         tf.summary.scalar(
-        #             'lr_loss_' + str(i),
-        #             self.lr_left_loss[i] + self.lr_right_loss[i])
-        #         tf.summary.image(
-        #             'disp_left_est_' + str(i),
-        #             self.disp_left_est[i],
-        #             max_outputs=4)
-        #         tf.summary.image(
-        #             'disp_right_est_' + str(i),
-        #             self.disp_right_est[i],
-        #             max_outputs=4)
-        #         tf.summary.image(
-        #             'occ_left_est_' + str(i),
-        #             self.left_occ_mask[i],
-        #             max_outputs=4)
-        #         tf.summary.image(
-        #             'occ_right_est_' + str(i),
-        #             self.right_occ_mask[i],
-        #             max_outputs=4)
+                if self.params.full_summary:
+                    tf.summary.image(
+                        'left_est_' + str(i),
+                        self.left_est[i],
+                        max_outputs=4)
+                    tf.summary.image(
+                        'right_est_' + str(i),
+                        self.right_est[i],
+                        max_outputs=4)
+                    tf.summary.image(
+                        'ssim_left_' + str(i),
+                        self.ssim_left[i],
+                        max_outputs=4)
+                    tf.summary.image(
+                        'ssim_right_' + str(i),
+                        self.ssim_right[i],
+                        max_outputs=4)
+                    tf.summary.image(
+                        'l1_left_' + str(i),
+                        self.l1_left[i],
+                        max_outputs=4)
+                    tf.summary.image(
+                        'l1_right_' + str(i),
+                        self.l1_right[i],
+                        max_outputs=4)
 
-        #         if self.params.full_summary:
-        #             tf.summary.image(
-        #                 'left_est_' + str(i),
-        #                 self.left_est[i],
-        #                 max_outputs=4)
-        #             tf.summary.image(
-        #                 'right_est_' + str(i),
-        #                 self.right_est[i],
-        #                 max_outputs=4)
-        #             tf.summary.image(
-        #                 'ssim_left_' + str(i),
-        #                 self.ssim_left[i],
-        #                 max_outputs=4)
-        #             tf.summary.image(
-        #                 'ssim_right_' + str(i),
-        #                 self.ssim_right[i],
-        #                 max_outputs=4)
-        #             tf.summary.image(
-        #                 'l1_left_' + str(i),
-        #                 self.l1_left[i],
-        #                 max_outputs=4)
-        #             tf.summary.image(
-        #                 'l1_right_' + str(i),
-        #                 self.l1_right[i],
-        #                 max_outputs=4)
-
-        #     if self.params.full_summary:
-        #         tf.summary.image(
-        #             'left',
-        #             self.left,
-        #             max_outputs=4)
-        #         tf.summary.image(
-        #             'right',
-        #             self.right,
-        #             max_outputs=4)
+            if self.params.full_summary:
+                tf.summary.image(
+                    'left',
+                    self.left,
+                    max_outputs=4)
+                tf.summary.image(
+                    'right',
+                    self.right,
+                    max_outputs=4)
 
 monodepth_parameters = namedtuple('parameters', 
                                   'alpha_image_loss, '
