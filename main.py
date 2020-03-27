@@ -12,28 +12,8 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
-
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
-
-from monodepth_dataloader import MonodepthDataloader
-from models import *
-
-from eval.evaluate_flow import load_gt_flow_kitti
-from eval.evaluate_mask import load_gt_mask
-from loss_utils import average_gradients
-
-from test import test
-
-# How often to record tensorboard summaries.
-SUMMARY_INTERVAL = 100
-
-# How often to run a batch through the validation model.
-VAL_INTERVAL = 10000 # 2500
-
-# How often to save a model checkpoint
-SAVE_INTERVAL = 2500
 
 FLAGS = flags.FLAGS
 
@@ -100,11 +80,10 @@ def main(unused_argv):
     #DEBUG!!!
     #VICTECH
 
-    if FLAGS.trace == "":
+    if opt.trace == "":
         raise Exception("OUT_DIR must be specified")
 
     print('Constructing models and inputs.')
-
     if opt.num_gpus == 1:
         from train_single_gpu import train
     else:

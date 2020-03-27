@@ -135,8 +135,13 @@ def train(Model, Model_eval):
                     summary_writer.add_summary(summary_str, itr)
 
                 if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
-                    saver.save(
-                        sess, opt.trace + '/model', global_step=global_step)
+                    saver.save(sess, opt.trace + '/model', global_step=global_step)
+
+            # Launch tensorboard
+            if itr == 16:
+                from launch_tensorboard import launch_tensorboard
+                launch_tensorboard(opt.trace)
+                print('*** Tensorboard launched')
 
             # Evaluate and write to tensorboard
             if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
