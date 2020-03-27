@@ -66,7 +66,7 @@ def train(Model, Model_eval):
                 reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
                 # total_loss = loss + reg_loss (for now, turn off regularization)
                 total_loss = loss
-                train_op = optimizer.minimize(total_loss)
+                train_op = optimizer.minimize(total_loss, global_step=global_step)
                 tf.summary.scalar('reg_loss', reg_loss)
                 tf.summary.scalar('total_loss', total_loss)
 
