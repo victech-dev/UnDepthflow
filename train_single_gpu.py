@@ -26,7 +26,7 @@ opt = flags.FLAGS
 def train(Model, Model_eval):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
-        train_op = tf.train.AdamOptimizer(opt.learning_rate)
+        optimizer = tf.train.AdamOptimizer(opt.learning_rate)
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
@@ -66,15 +66,9 @@ def train(Model, Model_eval):
                 reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
                 # total_loss = loss + reg_loss (for now, turn off regularization)
                 total_loss = loss
-
+                train_op = optimizer.minimize(total_loss)
                 tf.summary.scalar('reg_loss', reg_loss)
                 tf.summary.scalar('total_loss', total_loss)
-
-                grads = train_op.compute_gradients(
-                    total_loss, var_list=var_train_list)
-
-                # Apply the gradients to adjust the shared variables.
-                apply_gradient_op = train_op.apply_gradients(grads, global_step=global_step)
 
             with tf.name_scope("eval_model") as ns:
                 eval_model = Model_eval(scope=vs)
@@ -90,10 +84,8 @@ def train(Model, Model_eval):
         sess = tf.Session(config=config)
 
         # Build the summary operation from the last tower summaries.
-        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope="train_model")
-        summary_op = tf.summary.merge(summaries)
-        summary_writer = tf.summary.FileWriter(
-            opt.trace, graph=sess.graph, flush_secs=10)
+        summary_op = tf.summary.merge_all()
+        summary_writer = tf.summary.FileWriter(opt.trace, graph=sess.graph, flush_secs=10)
 
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
@@ -137,7 +129,7 @@ def train(Model, Model_eval):
         # Run training.
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
             if opt.train_test == "train":
-                _, summary_str = sess.run([apply_gradient_op, summary_op])
+                _, summary_str = sess.run([train_op, summary_op])
 
                 if (itr) % (SUMMARY_INTERVAL) == 2:
                     summary_writer.add_summary(summary_str, itr)
