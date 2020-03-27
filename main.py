@@ -14,6 +14,8 @@
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
+from pathlib import Path
+import re
 
 FLAGS = flags.FLAGS
 
@@ -64,6 +66,17 @@ flags.DEFINE_boolean('eval_depth', False, '')
 flags.DEFINE_boolean('eval_mask', False, '')
 opt = FLAGS
 
+def path_fix_existing(path):
+    path = path if isinstance(path, Path) else Path(path)
+    orgname = str(path.name)
+    suffix = 1
+    p = re.compile(orgname + r'_([1-9]\d*)$')
+    for subdir in path.parent.iterdir():
+        match = p.fullmatch(subdir.name)
+        if match:
+            suffix = max(suffix, int(match.group(1)) + 1)
+    return str(path.parent/f'{orgname}_{suffix}')
+
 def main(unused_argv):
     #VICTECH train
     from autoflags import autoflags
@@ -82,6 +95,9 @@ def main(unused_argv):
 
     if opt.trace == "":
         raise Exception("OUT_DIR must be specified")
+    if Path(opt.trace).exists():
+        old_trace, opt.trace = opt.trace, path_fix_existing(opt.trace)
+        print(f"!!! Output directory is renamed to '{opt.trace}', since '{old_trace}' already exists")
 
     print('Constructing models and inputs.')
     if opt.num_gpus == 1:
