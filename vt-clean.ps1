@@ -2,7 +2,7 @@
 
 $cmd = @"
 cd /workspace/UnDepthflow;
-rm -rf results_*
+rm -rf .results*
 "@
 
 $confirmation = Read-Host "Are you Sure You Want To Clean All (say yes)"
