@@ -18,41 +18,27 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
+from autoflags import opt
 from nets.pwc_disp import pwc_disp
 from core_warp import inv_warp_flow
 from optical_flow_warp_fwd import transformerFwd
 
-#DEBUG!!!!
-from tensorflow.python.platform import flags
-FLAGS = flags.FLAGS
-#DEBUG!!!!
-
 class MonodepthModel(object):
     """monodepth model"""
 
-    def __init__(self,
-                 params,
-                 mode,
-                 left,
-                 right,
-                 left_feature,
-                 right_feature,
-                 reuse_variables=None):
-        self.params = params
+    def __init__(self, mode, left, right, left_feature, right_feature, reuse_variables=None):
         self.mode = mode
         self.left = left
         self.right = right
         self.left_feature = left_feature
         self.right_feature = right_feature
-
         self.reuse_variables = reuse_variables
 
         self.build_model()
         if self.mode == 'test':
             return
-        self.build_outputs()
-        # 
 
+        self.build_outputs()
         self.build_losses()
 
         # Create summaries once when multiple models are created in multiple gpu
@@ -75,9 +61,9 @@ class MonodepthModel(object):
         return scaled_imgs
 
     def generate_flow_left(self, disp, scale):
-        batch_size = self.params.batch_size
-        H = self.params.height // (2**scale)
-        W = self.params.width // (2**scale)
+        batch_size = opt.batch_size
+        H = opt.img_height // (2**scale)
+        W = opt.img_width // (2**scale)
         zero_flow = tf.zeros([batch_size, H, W, 1])
         ltr_flow = -disp * W
         ltr_flow = tf.concat([ltr_flow, zero_flow], axis=3)
@@ -187,8 +173,8 @@ class MonodepthModel(object):
 
     def build_outputs(self):
         # STORE DISPARITIES
-        H = self.params.height
-        W = self.params.width
+        H = opt.img_height
+        W = opt.img_width
         with tf.variable_scope('disparities'):
             self.disp_est = [self.disp1, self.disp2, self.disp3, self.disp4]
             self.disp_left_est = [
@@ -214,7 +200,7 @@ class MonodepthModel(object):
                 transformerFwd(
                     tf.ones(
                         shape=[
-                            self.params.batch_size, H // (2**i), W // (2**i), 1
+                            opt.batch_size, H // (2**i), W // (2**i), 1
                         ],
                         dtype='float32'),
                     self.ltr_flow[i], [H // (2**i), W // (2**i)]),
@@ -227,7 +213,7 @@ class MonodepthModel(object):
                 transformerFwd(
                     tf.ones(
                         shape=[
-                            self.params.batch_size, H // (2**i), W // (2**i), 1
+                            opt.batch_size, H // (2**i), W // (2**i), 1
                         ],
                         dtype='float32'),
                     self.rtl_flow[i], [H // (2**i), W // (2**i)]),
@@ -270,17 +256,17 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            if FLAGS.smooth_mode == 'monodepth2':
+            if opt.smooth_mode == 'monodepth2':
                 self.disp_left_smoothness = self.get_disparity_smoothness_monodepth2(
                     self.disp_left_est, self.left_pyramid)
                 self.disp_right_smoothness = self.get_disparity_smoothness_monodepth2(
                     self.disp_right_est, self.right_pyramid)
-            elif FLAGS.smooth_mode == 'undepthflow':
+            elif opt.smooth_mode == 'undepthflow':
                 self.disp_left_smoothness = self.get_disparity_smoothness_2nd(
                     self.disp_left_est, self.left_pyramid)
                 self.disp_right_smoothness = self.get_disparity_smoothness_2nd(
                     self.disp_right_est, self.right_pyramid)
-            elif FLAGS.smooth_mode == 'undepthflow_v2':
+            elif opt.smooth_mode == 'sehee':
                 self.disp_left_smoothness = self.get_disparity_smoothness_2nd_v2(
                     self.disp_left_est, self.left_pyramid)
                 self.disp_right_smoothness = self.get_disparity_smoothness_2nd_v2(
@@ -331,14 +317,12 @@ class MonodepthModel(object):
 
             # WEIGTHED SUM
             self.image_loss_right = [
-                self.params.alpha_image_loss * self.ssim_loss_right[i] +
-                (1 - self.params.alpha_image_loss
-                 ) * self.l1_reconstruction_loss_right[i] for i in range(4)
+                opt.ssim_weight * self.ssim_loss_right[i] +
+                (1 - opt.ssim_weight) * self.l1_reconstruction_loss_right[i] for i in range(4)
             ]
             self.image_loss_left = [
-                self.params.alpha_image_loss * self.ssim_loss_left[i] +
-                (1 - self.params.alpha_image_loss
-                 ) * self.l1_reconstruction_loss_left[i] for i in range(4)
+                opt.ssim_weight * self.ssim_loss_left[i] +
+                (1 - opt.ssim_weight) * self.l1_reconstruction_loss_left[i] for i in range(4)
             ]
             self.image_loss = tf.add_n(self.image_loss_left + self.image_loss_right)
 
@@ -355,7 +339,7 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + self.params.disp_gradient_loss_weight * self.disp_gradient_loss + self.params.lr_loss_weight * self.lr_loss
+            self.total_loss = self.image_loss + opt.depth_smooth_weight * self.disp_gradient_loss + 1.0 * self.lr_loss
 
     def build_summaries(self):
         # SUMMARIES
@@ -394,7 +378,7 @@ class MonodepthModel(object):
                     self.right_occ_mask[i],
                     max_outputs=4)
 
-                if self.params.full_summary:
+                if False: #self.params.full_summary:
                     tf.summary.image(
                         'left_est_' + str(i),
                         self.left_est[i],
@@ -420,7 +404,7 @@ class MonodepthModel(object):
                         self.l1_right[i],
                         max_outputs=4)
 
-            if self.params.full_summary:
+            if False: #self.params.full_summary:
                 tf.summary.image(
                     'left',
                     self.left,
@@ -430,34 +414,14 @@ class MonodepthModel(object):
                     self.right,
                     max_outputs=4)
 
-monodepth_parameters = namedtuple('parameters', 
-                                  'alpha_image_loss, '
-                                  'disp_gradient_loss_weight, '
-                                  'lr_loss_weight, '
-                                  'full_summary, height, width, batch_size')
-
-
-def disp_godard(left_img,
-                right_img,
-                left_feature,
-                right_feature,
-                opt,
-                is_training=True):
-    params = monodepth_parameters(
-        alpha_image_loss=opt.ssim_weight,
-        disp_gradient_loss_weight=opt.depth_smooth_weight,
-        lr_loss_weight=1.0,
-        full_summary=False,
-        height=opt.img_height,
-        width=opt.img_width,
-        batch_size=int(left_img.get_shape()[0]))
+def disp_godard(left_img, right_img, left_feature, right_feature, is_training=True):
     if is_training:
-        model = MonodepthModel(params, "train", left_img, right_img,
+        model = MonodepthModel("train", left_img, right_img,
                                left_feature, right_feature)
         return [model.disp1, model.disp2, model.disp3,
                 model.disp4], model.total_loss
     else:
-        model = MonodepthModel(params, "test", left_img, right_img,
+        model = MonodepthModel("test", left_img, right_img,
                                left_feature, right_feature)
         return [model.disp1, model.disp2, model.disp3, model.disp4]
 

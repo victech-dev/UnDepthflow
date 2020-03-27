@@ -1,8 +1,12 @@
 import tensorflow as tf
-
 from tensorflow.python.platform import app
-from tensorflow.python.platform import flags
+import os
+import numpy as np
+import imgtool
+import cv2
+import open3d as o3d
 
+from autoflags import opt, autoflags
 from monodepth_dataloader import MonodepthDataloader
 from models import *
 
@@ -10,50 +14,8 @@ from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, 
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
 from loss_utils import average_gradients
-
 from test import test
-import os
-import numpy as np
-import imgtool
-import cv2
-import open3d as o3d
 
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_string('pretrained_model', '',
-                    'filepath of a pretrained model to initialize from.')
-flags.DEFINE_string(
-    'mode', '',
-    'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
-
-flags.DEFINE_string('data_dir', '', 'root filepath of data.')
-flags.DEFINE_string('gt_2012_dir', '',
-                    'directory of ground truth of kitti 2012')
-flags.DEFINE_string('gt_2015_dir', '',
-                    'directory of ground truth of kitti 2015')
-
-flags.DEFINE_integer("img_height", 256, "Image height")
-flags.DEFINE_integer("img_width", 832, "Image width")
-
-flags.DEFINE_float('weight_decay', 0.0004, 'scale of l2 regularization')
-
-flags.DEFINE_float("depth_smooth_weight", 10.0, "Weight for depth smoothness")
-flags.DEFINE_string("smooth_mode", 'monodepth2', "monodepth2 or undepthflow_v2")
-flags.DEFINE_float("ssim_weight", 0.85,
-                   "Weight for using ssim loss in pixel loss")
-flags.DEFINE_float("flow_smooth_weight", 10.0, "Weight for flow smoothness")
-flags.DEFINE_float("flow_consist_weight", 0.01, "Weight for flow consistent")
-flags.DEFINE_float("flow_diff_threshold", 4.0,
-                   "threshold when comparing optical flow and rigid flow ")
-
-flags.DEFINE_string('eval_pose', '', 'pose seq to evaluate')
-
-flags.DEFINE_integer("num_scales", 4, "Number of scales: 1/2^0, 1/2^1, ..., 1/2^(n-1)") #FLAGS.num_scales = 4
-flags.DEFINE_boolean('eval_flow', False, '')
-flags.DEFINE_boolean('eval_depth', False, '')
-flags.DEFINE_boolean('eval_mask', False, '')
-opt = FLAGS
 
 def predict_depth_single(sess, eval_model, image1, image2, image1r, image2r, K, fxb):
     height, width = image1.shape[:2] # original height, width
@@ -132,11 +94,11 @@ def count_weights():
         tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(depth_net|feature_net_disp).*")))
     var_flow = list(set(tf.get_collection(
         tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(flow_net|feature_net_flow).*")))
-    if FLAGS.mode == "depthflow":
+    if opt.mode == "depthflow":
         var_train_list = var_pose + var_depth + var_flow
-    elif FLAGS.mode == "depth":
+    elif opt.mode == "depth":
         var_train_list = var_pose + var_depth
-    elif FLAGS.mode == "flow":
+    elif opt.mode == "flow":
         var_train_list = var_flow
     else:
         var_train_list = var_depth
@@ -163,16 +125,14 @@ def show_pcd(img, depth, K):
 
 
 def main(unused_argv):
-    #VICTECH test
-    from autoflags import autoflags
-    Model, Model_eval = autoflags(opt, 'stereo', True)
+    opt.trace = '' # this should be empty because we have no output when testing
+    opt.batch_size = 1
+    opt.mode = 'stereo'
     opt.pretrained_model = '.results_original/model-stereo'
-    # opt.pretrained_model = '.results_original/model-depth'
-    # opt.pretrained_model = '.results_original/model-depthflow'
-    #VICTECH
+    Model, Model_eval = autoflags()
 
-    print('Constructing models and inputs.')
     with tf.Graph().as_default(), tf.device('/cpu:0'):
+        print('Constructing models and inputs.')
         image1 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1')
         image1r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1r')
         image2 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_2')

@@ -1,6 +1,6 @@
 import tensorflow as tf
-from tensorflow.python.platform import flags
 
+from autoflags import opt
 from nets.pose_net import pose_exp_net
 from monodepth_model import disp_godard
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
@@ -11,8 +11,6 @@ from monodepth_dataloader import get_multi_scale_intrinsics
 from utils import inverse_warp, inverse_warp_new
 from loss_utils import SSIM, deprocess_image, preprocess_image,\
   cal_grad2_error_mask, charbonnier_loss, cal_grad2_error
-
-opt = flags.FLAGS
 
 
 class Model_stereo(object):
@@ -31,7 +29,7 @@ class Model_stereo(object):
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
 
             pred_disp, stereo_smooth_loss = disp_godard(image1, image1r,
-                feature1_disp, feature1r_disp, opt, is_training=True)
+                feature1_disp, feature1r_disp, is_training=True)
 
             pred_depth = [1. / d for d in pred_disp]
 
@@ -76,7 +74,6 @@ class Model_eval_stereo(object):
                 input_1r,
                 feature1_disp,
                 feature1r_disp,
-                opt,
                 is_training=False)
 
         self.input_1 = input_uint8_1
@@ -267,7 +264,6 @@ class Model_depth(object):
                 image1r,
                 feature1_disp,
                 feature1r_disp,
-                opt,
                 is_training=True)
 
             pred_depth = [1. / d for d in pred_disp]
@@ -401,7 +397,6 @@ class Model_eval_depth(object):
                 input_1r,
                 feature1_disp,
                 feature1r_disp,
-                opt,
                 is_training=False)
             pred_poses = pose_exp_net(input_1, input_2)
 
@@ -457,7 +452,6 @@ class Model_depthflow(object):
                 image1r,
                 feature1_disp,
                 feature1r_disp,
-                opt,
                 is_training=True)
 
             pred_depth = [1. / d for d in pred_disp]
@@ -474,7 +468,6 @@ class Model_depthflow(object):
                 image2r,
                 feature2_disp,
                 feature2r_disp,
-                opt,
                 is_training=False)
 
             optical_flows = construct_model_pwc_full(
@@ -669,14 +662,12 @@ class Model_eval_depthflow(object):
                 input_1r,
                 feature1_disp,
                 feature1r_disp,
-                opt,
                 is_training=False)
             pred_disp_rev = disp_godard(
                 input_2,
                 input_2r,
                 feature2_disp,
                 feature2r_disp,
-                opt,
                 is_training=False)
 
             pred_poses = pose_exp_net(input_1, input_2)

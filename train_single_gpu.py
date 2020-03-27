@@ -1,16 +1,12 @@
 import tensorflow as tf
-
-from tensorflow.python.platform import flags
+from tqdm import trange
+import sys
 
 from monodepth_dataloader_v2 import batch_from_dataset
-
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
-
 from test import test
-from tqdm import trange
-import sys
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -21,10 +17,9 @@ VAL_INTERVAL = 20000 # 2500
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
 
-opt = flags.FLAGS
-
-def train(Model, Model_eval):
+def train(Model, Model_eval, opt):
     with tf.Graph().as_default():
+        print('*** Constructing models and inputs.')
         global_step = tf.Variable(0, trainable=False)
         optimizer = tf.train.AdamOptimizer(opt.learning_rate)
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
@@ -90,9 +85,7 @@ def train(Model, Model_eval):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         if opt.pretrained_model:
-            if opt.train_test == "test" or (not opt.retrain):
-                saver.restore(sess, opt.pretrained_model)
-            elif opt.mode == "depthflow":
+            if opt.mode == "depthflow":
                 saver_rest = tf.train.Saver(
                     list(
                         set(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) -
@@ -118,6 +111,7 @@ def train(Model, Model_eval):
 
         start_itr = global_step.eval(session=sess)
 
+        print('*** Loading gt data for evaluation if required')
         if opt.eval_flow:
             gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
             gt_flows_2015, noc_masks_2015 = load_gt_flow_kitti("kitti")
@@ -127,15 +121,15 @@ def train(Model, Model_eval):
               None, None, None, None, None
 
         # Run training.
+        print('*** Start training')
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
-            if opt.train_test == "train":
-                _, summary_str = sess.run([train_op, summary_op])
+            _, summary_str = sess.run([train_op, summary_op])
 
-                if (itr) % (SUMMARY_INTERVAL) == 2:
-                    summary_writer.add_summary(summary_str, itr)
+            if (itr) % (SUMMARY_INTERVAL) == 2:
+                summary_writer.add_summary(summary_str, itr)
 
-                if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
-                    saver.save(sess, opt.trace + '/model', global_step=global_step)
+            if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
+                saver.save(sess, opt.trace + '/model', global_step=global_step)
 
             # Launch tensorboard
             if itr == 16:
@@ -144,7 +138,7 @@ def train(Model, Model_eval):
                 print('*** Tensorboard launched')
 
             # Evaluate and write to tensorboard
-            if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
+            if (itr) % (VAL_INTERVAL) == 100:
                 result = test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
                 flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
                 summary = tf.Summary()
@@ -152,3 +146,5 @@ def train(Model, Model_eval):
                     summary.value.add(tag=k, simple_value=v)
                 summary_writer.add_summary(summary, itr)
                 summary_writer.flush()
+
+    print('*** Done')

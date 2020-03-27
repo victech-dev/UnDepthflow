@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from tensorflow.python.platform import flags
-
 from monodepth_dataloader_v2 import batch_from_dataset
 
 from eval.evaluate_flow import load_gt_flow_kitti
@@ -21,9 +19,7 @@ VAL_INTERVAL = 10000 # 2500
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
 
-opt = flags.FLAGS
-
-def train(Model, Model_eval):
+def train(Model, Model_eval, opt):
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.train.AdamOptimizer(opt.learning_rate)
@@ -136,9 +132,7 @@ def train(Model, Model_eval):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         if opt.pretrained_model:
-            if opt.train_test == "test" or (not opt.retrain):
-                saver.restore(sess, opt.pretrained_model)
-            elif opt.mode == "depthflow":
+            if opt.mode == "depthflow":
                 saver_rest = tf.train.Saver(
                     list(
                         set(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) -
@@ -184,7 +178,7 @@ def train(Model, Model_eval):
                     saver.save(
                         sess, opt.trace + '/model', global_step=global_step)
 
-            if (itr) % (VAL_INTERVAL) == 100 or opt.train_test == "test":
+            if (itr) % (VAL_INTERVAL) == 100:
                 test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
                      gt_flows_2015, noc_masks_2015, gt_masks)
 
