@@ -13,35 +13,21 @@
 # limitations under the License.
 # ==============================================================================
 import tensorflow as tf
-
 import tensorflow.contrib.slim as slim
-from tensorflow.python.platform import flags
+import functools
+
+from autoflags import opt
 from core_warp import inv_warp_flow
 
-opt = flags.FLAGS
 
-
-def resize_like(inputs, ref):
-    iH, iW = inputs.get_shape()[1], inputs.get_shape()[2]
-    rH, rW = ref.get_shape()[1], ref.get_shape()[2]
-    if iH == rH and iW == rW:
-        return inputs
-    return tf.image.resize_bilinear(inputs, [rH.value, rW.value])
-
-
-def leaky_relu(_x, alpha=0.1):
-    pos = tf.nn.relu(_x)
-    neg = alpha * (_x - abs(_x)) * 0.5
-
-    return pos + neg
-
+_leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 
 def feature_pyramid_disp(image, reuse):
     with tf.variable_scope('feature_net_disp'):
         with slim.arg_scope(
             [slim.conv2d, slim.conv2d_transpose],
                 weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-                activation_fn=leaky_relu,
+                activation_fn=_leaky_relu,
                 variables_collections=["flownet"],
                 reuse=reuse):
             cnv1 = slim.conv2d(image, 16, [3, 3], stride=2, scope="cnv1")
@@ -78,7 +64,7 @@ def optical_flow_decoder_dc(inputs, level):
     with slim.arg_scope(
         [slim.conv2d, slim.conv2d_transpose],
             weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-            activation_fn=leaky_relu):
+            activation_fn=_leaky_relu):
         cnv1 = slim.conv2d(
             inputs, 128, [3, 3], stride=1, scope="cnv1_fd_" + str(level))
         cnv2 = slim.conv2d(
@@ -119,7 +105,7 @@ def context_net(inputs):
     with slim.arg_scope(
         [slim.conv2d, slim.conv2d_transpose],
             weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-            activation_fn=leaky_relu):
+            activation_fn=_leaky_relu):
         cnv1 = slim.conv2d(inputs, 128, [3, 3], rate=1, scope="cnv1_cn")
         cnv2 = slim.conv2d(cnv1, 128, [3, 3], rate=2, scope="cnv2_cn")
         cnv3 = slim.conv2d(cnv2, 128, [3, 3], rate=4, scope="cnv3_cn")
