@@ -52,7 +52,8 @@ def autoflags():
     # data path
     dirs = [os.path.expanduser('~/datasets/kitti_data'),
         '/media/data/datasets/kitti_data', '/media/vicnas/datasets/kitti_data', 
-        'C:\\datasets\\kitti_data', 'D:\\datasets\\kitti_data', 'M:\\datasets\\kitti_data']
+        'C:\\datasets\\kitti_data', 'D:\\datasets\\kitti_data', 
+        'E:\\datasets\\kitti_data', 'M:\\datasets\\kitti_data']
     found = next((x for x in dirs if os.path.isdir(x)), None)
     if found is None:
         raise RuntimeError('KITTI data not found!!')

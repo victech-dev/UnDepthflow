@@ -6,7 +6,7 @@ from monodepth_dataloader_v2 import batch_from_dataset
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
-from test import test
+from eval.evaluate_kitti import evaluate_kitti
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -139,7 +139,7 @@ def train(Model, Model_eval, opt):
 
             # Evaluate and write to tensorboard
             if (itr) % (VAL_INTERVAL) == 100:
-                result = test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
+                result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
                 flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
                 summary = tf.Summary()
                 for k, v in flatten:
