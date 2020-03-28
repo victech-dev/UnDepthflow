@@ -27,13 +27,17 @@ class Model_stereo(object):
         with tf.variable_scope(scope, reuse=reuse_scope):
             feature1_disp = feature_pyramid_disp(image1, reuse=False)
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
+            disp_outputs = disp_godard(image1, image1r, feature1_disp, feature1r_disp, is_training=True)
 
-            pred_disp, stereo_smooth_loss = disp_godard(image1, image1r,
-                feature1_disp, feature1r_disp, is_training=True)
+        self.loss = disp_outputs['total_loss']
+        self.outputs = disp_outputs
 
-            pred_depth = [1. / d for d in pred_disp]
-
-        self.loss = stereo_smooth_loss
+        # Create summaries once when multiple models are created in multiple gpu
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
+            with tf.name_scope('stereo_losses/'):
+                tf.summary.scalar('image_loss', disp_outputs['image_loss'])
+                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
 
         # VICTECH disable this for training performance
         # tf.summary.image("pred_disp", pred_disp[0][:, :, :, 0:1])
@@ -69,12 +73,8 @@ class Model_eval_stereo(object):
             feature1_disp = feature_pyramid_disp(input_1, reuse=True)
             feature1r_disp = feature_pyramid_disp(input_1r, reuse=True)
 
-            pred_disp = disp_godard(
-                input_1,
-                input_1r,
-                feature1_disp,
-                feature1r_disp,
-                is_training=False)
+            disp_outputs = disp_godard(input_1, input_1r, feature1_disp, feature1r_disp, is_training=False)
+            pred_disp = disp_outputs['disp']
 
         self.input_1 = input_uint8_1
         self.input_2 = input_uint8_2
@@ -101,8 +101,6 @@ class Model_flow(object):
                  pix2cam=None,
                  reuse_scope=False,
                  scope=None):
-        summaries = []
-
         batch_size, H, W, color_channels = map(int, image1.get_shape()[0:4])
 
         with tf.variable_scope(scope, reuse=reuse_scope):
@@ -134,7 +132,6 @@ class Model_flow(object):
         src_image_all = []
         proj_image_depth_all = []
         proj_error_depth_all = []
-        exp_mask_stack_all = []
         flyout_map_all = []
 
         for s in range(opt.num_scales):
@@ -174,6 +171,8 @@ class Model_flow(object):
             flyout_map_all.append(curr_flyout_map)
 
         self.loss = (pixel_loss_optical + flow_smooth_loss)
+        self.outputs = dict(optical_flows=optical_flows, 
+            optical_flows_rev=optical_flows_rev, occu_masks=occu_masks)
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'flow_losses/.*'):
             with tf.name_scope('flow_losses/'):
@@ -248,8 +247,6 @@ class Model_depth(object):
                  pix2cam=None,
                  reuse_scope=False,
                  scope=None):
-        summaries = []
-
         batch_size, H, W, color_channels = map(int, image1.get_shape()[0:4])
 
         with tf.variable_scope(scope, reuse=reuse_scope):
@@ -259,12 +256,8 @@ class Model_depth(object):
             feature1_disp = feature_pyramid_disp(image1, reuse=False)
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
 
-            pred_disp, stereo_smooth_loss = disp_godard(
-                image1,
-                image1r,
-                feature1_disp,
-                feature1r_disp,
-                is_training=True)
+            disp_outputs = disp_godard(image1, image1r, feature1_disp, feature1r_disp, is_training=True)
+            pred_disp, stereo_smooth_loss = disp_outputs['disp'], disp_outputs['total_loss']
 
             pred_depth = [1. / d for d in pred_disp]
             pred_poses = pose_exp_net(image1, image2)
@@ -289,7 +282,6 @@ class Model_depth(object):
         src_image_all = []
         proj_image_depth_all = []
         proj_error_depth_all = []
-        exp_mask_stack_all = []
         flyout_map_all = []
 
         for s in range(opt.num_scales):
@@ -332,6 +324,14 @@ class Model_depth(object):
             flyout_map_all.append(curr_flyout_map)
 
         self.loss = (10.0 * pixel_loss_depth + stereo_smooth_loss)
+        self.outputs = dict(stereo=disp_outputs, occu_masks=occu_masks, 
+            optical_flows_rev=optical_flows_rev, pred_poses=pred_poses)
+
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
+            with tf.name_scope('stereo_losses/'):
+                tf.summary.scalar('image_loss', disp_outputs['image_loss'])
+                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):
             with tf.name_scope('depth_losses/'):
@@ -392,12 +392,8 @@ class Model_eval_depth(object):
             feature1_flow = feature_pyramid_flow(input_1, reuse=True)
             feature2_flow = feature_pyramid_flow(input_2, reuse=True)
 
-            pred_disp = disp_godard(
-                input_1,
-                input_1r,
-                feature1_disp,
-                feature1r_disp,
-                is_training=False)
+            disp_outputs = disp_godard(input_1, input_1r, feature1_disp, feature1r_disp, is_training=False)
+            pred_disp = disp_outputs['disp']
             pred_poses = pose_exp_net(input_1, input_2)
 
             optical_flows = construct_model_pwc_full(
@@ -436,8 +432,6 @@ class Model_depthflow(object):
                  pix2cam=None,
                  reuse_scope=False,
                  scope=None):
-        summaries = []
-
         batch_size, H, W, color_channels = map(int, image1.get_shape()[0:4])
 
         with tf.variable_scope(scope, reuse=reuse_scope):
@@ -447,12 +441,8 @@ class Model_depthflow(object):
             feature1_disp = feature_pyramid_disp(image1, reuse=False)
             feature1r_disp = feature_pyramid_disp(image1r, reuse=True)
 
-            pred_disp, stereo_smooth_loss = disp_godard(
-                image1,
-                image1r,
-                feature1_disp,
-                feature1r_disp,
-                is_training=True)
+            disp_outputs = disp_godard(image1, image1r, feature1_disp, feature1r_disp, is_training=True)
+            pred_disp, stereo_smooth_loss = disp_outputs['disp'], disp_outputs['total_loss']
 
             pred_depth = [1. / d for d in pred_disp]
             pred_poses = pose_exp_net(image1, image2)
@@ -463,12 +453,8 @@ class Model_depthflow(object):
         with tf.variable_scope(scope, reuse=True):
             feature2_disp = feature_pyramid_disp(image2, reuse=True)
             feature2r_disp = feature_pyramid_disp(image2r, reuse=True)
-            pred_disp_rev = disp_godard(
-                image2,
-                image2r,
-                feature2_disp,
-                feature2r_disp,
-                is_training=False)
+            disp_outputs2 = disp_godard(image2, image2r, feature2_disp, feature2r_disp, is_training=False)
+            pred_disp_rev = disp_outputs2['disp']
 
             optical_flows = construct_model_pwc_full(
                 image1, image2, feature1_flow, feature2_flow)
@@ -590,6 +576,17 @@ class Model_depthflow(object):
             3.0 * pixel_loss_depth + stereo_smooth_loss
         ) + pixel_loss_optical + flow_smooth_loss + flow_consist_loss
 
+        self.outputs = dict(stereo=disp_outputs, pred_poses=pred_poses,
+            optical_flows=optical_flows, optical_flows_rev=optical_flows_rev,
+            occu_masks=occu_masks, flow_diff=flow_diff, flow_diff_mask = flow_diff_mask, 
+            occu_region=occu_region, ref_exp_mask=ref_exp_mask)
+
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
+            with tf.name_scope('stereo_losses/'):
+                tf.summary.scalar('image_loss', disp_outputs['image_loss'])
+                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
+
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):
             with tf.name_scope('depth_losses/'):
                 tf.summary.scalar("pixel_loss_depth", pixel_loss_depth)
@@ -657,18 +654,10 @@ class Model_eval_depthflow(object):
             feature1_flow = feature_pyramid_flow(input_1, reuse=True)
             feature2_flow = feature_pyramid_flow(input_2, reuse=True)
 
-            pred_disp = disp_godard(
-                input_1,
-                input_1r,
-                feature1_disp,
-                feature1r_disp,
-                is_training=False)
-            pred_disp_rev = disp_godard(
-                input_2,
-                input_2r,
-                feature2_disp,
-                feature2r_disp,
-                is_training=False)
+            disp_outputs = disp_godard(input_1, input_1r, feature1_disp, feature1r_disp, is_training=False)
+            pred_disp = disp_outputs['disp']
+            disp_outputs2 = disp_godard(input_2, input_2r, feature2_disp, feature2r_disp, is_training=False)
+            pred_disp_rev = disp_outputs2['disp']
 
             pred_poses = pose_exp_net(input_1, input_2)
 

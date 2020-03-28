@@ -41,13 +41,6 @@ class MonodepthModel(object):
         self.build_outputs()
         self.build_losses()
 
-        # Create summaries once when multiple models are created in multiple gpu
-        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
-            with tf.name_scope('stereo_losses/'):
-                tf.summary.scalar('image_loss', self.image_loss)
-                tf.summary.scalar('disp_gradient_loss', self.disp_gradient_loss)
-                tf.summary.scalar('lr_loss', self.lr_loss)
-
     def scale_pyramid(self, img, num_scales):
         scaled_imgs = [img]
         s = tf.shape(img)
@@ -415,13 +408,15 @@ class MonodepthModel(object):
                     max_outputs=4)
 
 def disp_godard(left_img, right_img, left_feature, right_feature, is_training=True):
+    mode = 'train' if is_training else 'test'
+    model = MonodepthModel(mode, left_img, right_img, left_feature, right_feature)
+    outputs = dict(disp=[model.disp1, model.disp2, model.disp3, model.disp4])
     if is_training:
-        model = MonodepthModel("train", left_img, right_img,
-                               left_feature, right_feature)
-        return [model.disp1, model.disp2, model.disp3,
-                model.disp4], model.total_loss
-    else:
-        model = MonodepthModel("test", left_img, right_img,
-                               left_feature, right_feature)
-        return [model.disp1, model.disp2, model.disp3, model.disp4]
+        outputs['total_loss'] = model.total_loss
+        outputs['image_loss'] = model.image_loss
+        outputs['disp_gradient_loss'] = model.disp_gradient_loss
+        outputs['lr_loss'] = model.lr_loss
+        outputs['left_occ_mask'] = model.left_occ_mask
+        outputs['right_occ_mask'] = model.right_occ_mask
+    return outputs
 
