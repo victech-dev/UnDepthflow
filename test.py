@@ -7,44 +7,23 @@ import cv2
 import open3d as o3d
 
 from autoflags import opt, autoflags
-from monodepth_dataloader import MonodepthDataloader
-from models import *
-
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
-from loss_utils import average_gradients
-from eval.evaluate_kitti import evaluate_kitti
+from eval.test_model import TestModel
 
-
-def predict_depth_single(sess, eval_model, image1, image2, image1r, image2r, K, fxb):
+def predict_depth_single(sess, model, image1, image2, image1r, image2r, K, fxb):
     height, width = image1.shape[:2] # original height, width
-    # fit to model input
-    img1 = imgtool.imresize(image1, (opt.img_height, opt.img_width))
-    img2 = imgtool.imresize(image2, (opt.img_height, opt.img_width))
-    img1r = imgtool.imresize(image1r, (opt.img_height, opt.img_width))
-    img2r = imgtool.imresize(image2r, (opt.img_height, opt.img_width))
-    # prepend batch dimension
-    img1 = np.expand_dims(img1, axis=0)
-    img2 = np.expand_dims(img2, axis=0)
-    img1r = np.expand_dims(img1r, axis=0)
-    img2r = np.expand_dims(img2r, axis=0)
-    # zoom K
-    K = scale_intrinsics(K, opt.img_width / width, opt.img_height / height)
     # session run
-    pred_disp, _ = sess.run(
-        [eval_model.pred_disp, eval_model.pred_mask],
-        feed_dict = {
-            eval_model.input_1: img1, eval_model.input_2: img2,
-            eval_model.input_r: img1r, eval_model.input_2r: img2r, 
-            eval_model.input_intrinsic: K})
+    outputs = model(sess, image1, image2, image1r, image2r, K)
+    disp0 = outputs['stereo']['disp'][0] # [1, H, W, (ltr,rtl)]
+    pred_disp = disp0[0,:,:,0:1]
     # depth from disparity
-    pred_disp = np.squeeze(pred_disp)
     pred_disp = width * cv2.resize(pred_disp, (width, height))
     pred_depth = fxb / pred_disp
     return pred_depth
 
-def predict_depth_single_gt_2015(sess, eval_model, i):
+def predict_depth_single_gt_2015(sess, model, i):
     gt_dir = opt.gt_2015_dir
     img1 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_10.png"))
     img2 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_11.png"))
@@ -52,22 +31,22 @@ def predict_depth_single_gt_2015(sess, eval_model, i):
     img2r = imgtool.imread(os.path.join(gt_dir, "image_3", str(i).zfill(6) + "_11.png"))
     K = get_scaled_intrinsic_matrix(os.path.join(gt_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
     fxb = width_to_focal[img1.shape[1]] * 0.54
-    depth = predict_depth_single(sess, eval_model, img1, img2, img1r, img2r, K, fxb)
+    depth = predict_depth_single(sess, model, img1, img2, img1r, img2r, K, fxb)
     # import time
     # time0 = time.time()
     # for _ in range(1000):
-    #     predict_depth_single(sess, eval_model, img1, img2, img1r, img2r, K, fxb)
+    #     predict_depth_single(sess, model, img1, img2, img1r, img2r, K, fxb)
     # time1 = time.time()
     # print("**** 1000 elapsed:", time1 - time0)
     return img1, depth, K
 
-def predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR):
+def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
     K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
     K = np.array(K).reshape(3,3)
     fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
-    depth = predict_depth_single(sess, eval_model, imgL, imgL, imgR, imgR, K, fxb)
+    depth = predict_depth_single(sess, model, imgL, imgL, imgR, imgR, K, fxb)
     return imgL, depth, K
 
 def create_axis_bar():
@@ -129,23 +108,13 @@ def main(unused_argv):
     opt.batch_size = 1
     opt.mode = 'stereo'
     opt.pretrained_model = '.results_original/model-stereo'
-    Model, Model_eval = autoflags()
+    Model, _ = autoflags()
 
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         print('Constructing models and inputs.')
-        image1 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1')
-        image1r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1r')
-        image2 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_2')
-        image2r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_2r')
-        cam2pix = tf.placeholder(tf.float32, [1, 4, 3, 3], name='dummy_cam2pix')
-        pix2cam = tf.placeholder(tf.float32, [1, 4, 3, 3], name='dummy_pix2cam')
-
         with tf.variable_scope(tf.get_variable_scope()) as vs:
-            with tf.name_scope("model") as ns:
-                model = Model(image1, image2, image1r, image2r, 
-                    cam2pix, pix2cam, reuse_scope=False, scope=vs)
-                count_weights()
-                eval_model = Model_eval(scope=vs)
+            with tf.name_scope("test_model"):
+                model = TestModel(Model, vs)
 
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
@@ -161,33 +130,16 @@ def main(unused_argv):
         sess.run(tf.local_variables_initializer())
         saver.restore(sess, opt.pretrained_model)
 
-        # # evaluate KITTI gt 2012/2015
-        # if opt.eval_flow:
-        #     gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
-        #     gt_flows_2015, noc_masks_2015 = load_gt_flow_kitti("kitti")
-        #     gt_masks = load_gt_mask()
-        # else:
-        #     gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks = \
-        #       None, None, None, None, None
-        # evaluate_kitti(sess, eval_model, 0, gt_flows_2012, noc_masks_2012,
-        #         gt_flows_2015, noc_masks_2015, gt_masks)
-
-        # # show depth 
-        # depth /= 10; depth = np.clip(depth, 0, 1)
-        # cv2.imshow('depth', depth)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-
         # # point cloud test of KITTI 2015 gt
         for i in range(200):
-            img, depth, K = predict_depth_single_gt_2015(sess, eval_model, i)
+            img, depth, K = predict_depth_single_gt_2015(sess, model, i)
             show_pcd(img, depth, K)
 
         # # point cloud test of office image
         # data_dir = 'M:\\Users\\sehee\\StereoCalibrationExample_200313_1658'
         # imgnameL = os.path.join(data_dir, 'photo04_L.jpg')
         # imgnameR = os.path.join(data_dir, 'photo04_R.jpg')
-        # img, depth, K = predict_depth_vicimg(sess, eval_model, imgnameL, imgnameR)
+        # img, depth, K = predict_depth_vicimg(sess, model, imgnameL, imgnameR)
         # depth = np.clip(depth, 0, 20)
         # show_pcd(img, depth, K)
 

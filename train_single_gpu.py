@@ -6,7 +6,7 @@ from monodepth_dataloader_v2 import batch_from_dataset
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
-from eval.evaluate_kitti import evaluate_kitti
+from eval_kitti import evaluate_kitti
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100

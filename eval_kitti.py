@@ -1,19 +1,20 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.platform import app
 import imgtool
 
 from eval.evaluate_depth import load_depths, eval_depth
-from eval.evaluate_flow import get_scaled_intrinsic_matrix, eval_flow_avg
+from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, eval_flow_avg
 from eval.evaluate_mask import eval_mask
-
 from eval.evaluate_disp import eval_disp_avg
 from eval.pose_evaluation_utils import pred_pose
 from eval.eval_pose import eval_snippet, kittiEvalOdom
+from eval.evaluate_mask import load_gt_mask
 
 import re, os
 import sys
 
-from autoflags import opt
+from autoflags import opt, autoflags
 
 def _parse_to_dict(result):
     # parse string 'name1,name2,...\nvalue1,value2,...' to dict of {name1:value1, name2:value2, ...}
@@ -158,3 +159,52 @@ def evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flow
                 sys.stderr.write("mask_err is %s \n" % str(mask_err))
     sys.stderr.flush()
     return summaries
+
+def main(unused_argv):
+    opt.trace = '' # this should be empty because we have no output when testing
+    opt.batch_size = 1
+    opt.mode = 'stereo'
+    opt.pretrained_model = '.results_original/model-stereo'
+    Model, Model_eval = autoflags()
+
+    with tf.Graph().as_default(), tf.device('/cpu:0'):
+        print('Constructing models and inputs.')
+        image1 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1')
+        image1r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_1r')
+        image2 = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_2')
+        image2r = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_2r')
+        cam2pix = tf.placeholder(tf.float32, [1, 4, 3, 3], name='dummy_cam2pix')
+        pix2cam = tf.placeholder(tf.float32, [1, 4, 3, 3], name='dummy_pix2cam')
+
+        with tf.variable_scope(tf.get_variable_scope()) as vs:
+            with tf.name_scope("eval_model"):
+                _ = Model(image1, image2, image1r, image2r, cam2pix, pix2cam, reuse_scope=False, scope=vs)
+                eval_model = Model_eval(scope=vs)
+
+        # Create a saver.
+        saver = tf.train.Saver(max_to_keep=10)
+
+        # Make training session.
+        config = tf.ConfigProto()
+        config.allow_soft_placement = True
+        config.log_device_placement = False
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
+
+        sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
+        saver.restore(sess, opt.pretrained_model)
+
+        # evaluate KITTI gt 2012/2015
+        if opt.eval_flow:
+            gt_flows_2012, noc_masks_2012 = load_gt_flow_kitti("kitti_2012")
+            gt_flows_2015, noc_masks_2015 = load_gt_flow_kitti("kitti")
+            gt_masks = load_gt_mask()
+        else:
+            gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks = \
+              None, None, None, None, None
+        evaluate_kitti(sess, eval_model, 0, gt_flows_2012, noc_masks_2012,
+                gt_flows_2015, noc_masks_2015, gt_masks)
+
+if __name__ == '__main__':
+    app.run()

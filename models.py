@@ -30,7 +30,7 @@ class Model_stereo(object):
             disp_outputs = disp_godard(image1, image1r, feature1_disp, feature1r_disp, is_training=True)
 
         self.loss = disp_outputs['total_loss']
-        self.outputs = disp_outputs
+        self.outputs = dict(stereo=disp_outputs)
 
         # Create summaries once when multiple models are created in multiple gpu
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):

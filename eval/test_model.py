@@ -22,8 +22,10 @@ class TestModel(object):
             self.image2 = tf.placeholder(tf.float32, img_shape, name='input_image2')
             self.image1r = tf.placeholder(tf.float32, img_shape, name='input_image1r')
             self.image2r = tf.placeholder(tf.float32, img_shape, name='input_image2r')
-            self.cam2pix = tf.placeholder(tf.float32, [1, 3, 3])
-            self.pix2cam = tf.placeholder(tf.float32, [1, 3, 3])
+            self.intrinsic = tf.placeholder(tf.float32, [3, 3])
+            self.cam2pix, self.pix2cam = get_multi_scale_intrinsics(self.intrinsic, opt.num_scales)
+            self.cam2pix = tf.expand_dims(self.cam2pix, axis=0)
+            self.pix2cam = tf.expand_dims(self.pix2cam, axis=0)
             self.model = train_model(self.image1, self.image2, self.image1r, self.image2r, 
                 self.cam2pix, self.pix2cam, reuse_scope=False, scope=scope)
             self.outputs = self.model.outputs
@@ -45,12 +47,7 @@ class TestModel(object):
         img2r = (img2r / 255).astype(np.float32)
 
         K = scale_intrinsics(K, opt.img_width / orig_W, opt.img_height / orig_H)
-        cam2pix, pix2cam = get_multi_scale_intrinsics(K, opt.num_scales)
-        cam2pix = tf.expand_dims(cam2pix, axis=0)
-        pix2cam = tf.expand_dims(pix2cam, axis=0)
-
         outputs = sess.run(self.model.outputs, 
                 feed_dict = {self.image1: img1, self.image2: img2, 
-                self.image1r: img1r, self.image2r: img2r, 
-                self.cam2pix: cam2pix, self.pix2cam: pix2cam})
+                self.image1r: img1r, self.image2r: img2r, self.intrinsic: K})
         return outputs
