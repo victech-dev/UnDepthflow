@@ -3,7 +3,7 @@ cd /workspace/UnDepthflow;
 git pull;
 tmux kill-session -t sehee &> /dev/null;
 tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=undepthflow_v2 --depth_smooth_weight=0.5 2> tlog.txt' Enter;
+tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.2 2> tlog.txt' Enter;
 "@
 
 $cmd01 = @"
@@ -11,7 +11,7 @@ cd /workspace/UnDepthflow;
 git pull;
 tmux kill-session -t sehee &> /dev/null;
 tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=undepthflow_v2 --depth_smooth_weight=1.0 2> tlog.txt' Enter;
+tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.4 2> tlog.txt' Enter;
 "@
 
 $cmd02 = @"
@@ -19,7 +19,7 @@ cd /workspace/UnDepthflow;
 git pull;
 tmux kill-session -t sehee &> /dev/null;
 tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=undepthflow_v2 --depth_smooth_weight=1.5 2> tlog.txt' Enter;
+tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.6 2> tlog.txt' Enter;
 "@
 
 $cmd99 = @"
@@ -28,7 +28,7 @@ git pull;
 tmux kill-session -t sehee &> /dev/null;
 tmux new-session -d -s sehee;
 tmux send-keys -t sehee:0 '. activate vt-learn' Enter;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=undepthflow_v2 --depth_smooth_weight=2.0 2> tlog.txt' Enter;
+tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.8 2> tlog.txt' Enter;
 "@
 
 

@@ -34,4 +34,6 @@ tar -xvf .results99/results.tar -C .results99
 del .results99/results.tar
 plink -load VT-Learner-99 -batch "rm -f /workspace/UnDepthflow/results.tar"
 
-pause
+conda activate pydc
+Start-Process "chrome.exe" "http://localhost:6006"
+tensorboard --logdir .
