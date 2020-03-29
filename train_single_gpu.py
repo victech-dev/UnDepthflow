@@ -1,6 +1,8 @@
 import tensorflow as tf
+import numpy as np
 from tqdm import trange
 import sys
+import functools
 
 from monodepth_dataloader_v2 import batch_from_dataset
 from eval.evaluate_flow import load_gt_flow_kitti
@@ -17,11 +19,22 @@ VAL_INTERVAL = 20000 # 2500
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
 
+# Cosine annealing LR Scheduler
+def lr_scheduler(lr, prog):
+    if isinstance(lr, (float, int)):
+        return float(lr)
+    elif isinstance(lr, (list, tuple)):
+        lr_max, lr_min = lr
+        return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(prog * np.pi))
+    else:
+        raise ValueError('Invalid learning rate')
+
 def train(Model, Model_eval, opt):
     with tf.Graph().as_default():
         print('*** Constructing models and inputs.')
         global_step = tf.Variable(0, trainable=False)
-        optimizer = tf.train.AdamOptimizer(opt.learning_rate)
+        lr = tf.placeholder(tf.float32, name='learning_rate')
+        optimizer = tf.train.AdamOptimizer(lr)
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
@@ -122,8 +135,10 @@ def train(Model, Model_eval, opt):
 
         # Run training.
         print('*** Start training')
+        lr_func = functools.partial(lr_scheduler, opt.learning_rate)
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
-            _, summary_str = sess.run([train_op, summary_op])
+            _, summary_str = sess.run([train_op, summary_op], 
+                feed_dict={lr: lr_func(itr / opt.num_iterations)})
 
             if (itr) % (SUMMARY_INTERVAL) == 2:
                 summary_writer.add_summary(summary_str, itr)

@@ -14,7 +14,7 @@ import cv2
 if not hasattr(Image, 'frombytes'):
     Image.frombytes = Image.fromstring
 
-__all__ = ['fromimage', 'toimage', 'imsave', 'imread', 'bytescale', 'imresize']
+__all__ = ['fromimage', 'toimage', 'imsave', 'imread', 'bytescale', 'imresize', 'imshow']
 
 
 def bytescale(data, cmin=None, cmax=None, high=255, low=0):
@@ -436,3 +436,11 @@ def imresize(arr, size, interp='bilinear', mode=None):
     func = {'nearest': 0, 'lanczos': 1, 'bilinear': 2, 'bicubic': 3, 'cubic': 3}
     imnew = im.resize(size, resample=func[interp])
     return fromimage(imnew)
+
+def imshow(img, name='imshow', rgb=True, wait=True):
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    if len(img.shape)==3 and img.shape[2]==3 and rgb:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    cv2.imshow(name, img)
+    if wait:
+        cv2.waitKey(0)

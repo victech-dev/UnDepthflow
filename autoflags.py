@@ -25,7 +25,7 @@ flags.DEFINE_string('gt_2012_dir', '', 'directory of ground truth of kitti 2012'
 flags.DEFINE_string('gt_2015_dir', '', 'directory of ground truth of kitti 2015')
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
-flags.DEFINE_float('learning_rate', 1e-4, 'the base learning rate of the generator')
+flags.DEFINE_multi_float('learning_rate', [1e-4, 1e-5], 'single value or range')
 flags.DEFINE_integer('num_gpus', 1, 'the number of gpu to use')
 flags.DEFINE_float('weight_decay', 1e-4, 'scale of l2 regularization')
 
