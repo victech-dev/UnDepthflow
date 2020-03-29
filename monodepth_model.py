@@ -68,24 +68,6 @@ class MonodepthModel(object):
     def generate_transformed(self, img, flow, scale):
         return inv_warp_flow(img, flow)
 
-    def SSIM(self, x, y):
-        C1 = 0.01**2
-        C2 = 0.03**2
-
-        mu_x = slim.avg_pool2d(x, 3, 1, 'VALID')
-        mu_y = slim.avg_pool2d(y, 3, 1, 'VALID')
-
-        sigma_x = slim.avg_pool2d(x**2, 3, 1, 'VALID') - mu_x**2
-        sigma_y = slim.avg_pool2d(y**2, 3, 1, 'VALID') - mu_y**2
-        sigma_xy = slim.avg_pool2d(x * y, 3, 1, 'VALID') - mu_x * mu_y
-
-        SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
-        SSIM_d = (mu_x**2 + mu_y**2 + C1) * (sigma_x + sigma_y + C2)
-
-        SSIM = SSIM_n / SSIM_d
-
-        return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
-
     ''' undepthflow (with disp norm, index bug fixed) '''
     def get_disparity_smoothness_2nd(self, disp, pyramid):
         LOSS_COEFFS = [1.0, 0.28772402, 0.10591773, 0.04457521]
@@ -170,12 +152,8 @@ class MonodepthModel(object):
         W = opt.img_width
         with tf.variable_scope('disparities'):
             self.disp_est = [self.disp1, self.disp2, self.disp3, self.disp4]
-            self.disp_left_est = [
-                tf.expand_dims(d[:, :, :, 0], 3) for d in self.disp_est
-            ]
-            self.disp_right_est = [
-                tf.expand_dims(d[:, :, :, 1], 3) for d in self.disp_est
-            ]
+            self.disp_left_est = [d[:, :, :, 0:1] for d in self.disp_est]
+            self.disp_right_est = [d[:, :, :, 1:2] for d in self.disp_est]
 
         if self.mode == 'test':
             return
@@ -267,8 +245,7 @@ class MonodepthModel(object):
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
-            # IMAGE RECONSTRUCTION
-            # L1
+            # IMAGE RECONSTRUCTION (L1)
             self.l1_left = [
                 tf.abs(self.left_est[i] - self.left_pyramid[i]) *
                 self.left_occ_mask[i] for i in range(4)
@@ -289,24 +266,18 @@ class MonodepthModel(object):
 
             # SSIM
             self.ssim_left = [
-                self.SSIM(self.left_est[i] * self.left_occ_mask[i],
-                          self.left_pyramid[i] * self.left_occ_mask[i])
-                for i in range(4)
-            ]
+                tf.image.ssim(est * mask, tgt * mask, 1.0, filter_size=3, filter_sigma=256)
+                for est, tgt, mask in zip(self.left_est, self.left_pyramid, self.left_occ_mask)]
             self.ssim_loss_left = [
-                tf.reduce_mean(s) / self.left_occ_mask_avg[i]
-                for i, s in enumerate(self.ssim_left)
-            ]
+                tf.reduce_mean(tf.clip_by_value(0.5 * (1 - ssim), 0, 1)) / denom
+                for ssim, denom in zip(self.ssim_left, self.left_occ_mask_avg)]
 
             self.ssim_right = [
-                self.SSIM(self.right_est[i] * self.right_occ_mask[i],
-                          self.right_pyramid[i] * self.right_occ_mask[i])
-                for i in range(4)
-            ]
+                tf.image.ssim(est * mask, tgt * mask, 1.0, filter_size=3, filter_sigma=256)
+                for est, tgt, mask in zip(self.right_est, self.right_pyramid, self.right_occ_mask)]
             self.ssim_loss_right = [
-                tf.reduce_mean(s) / self.right_occ_mask_avg[i]
-                for i, s in enumerate(self.ssim_right)
-            ]
+                tf.reduce_mean(tf.clip_by_value(0.5 * (1 - ssim), 0, 1)) / denom
+                for ssim, denom in zip(self.ssim_right, self.right_occ_mask_avg)]
 
             # WEIGTHED SUM
             self.image_loss_right = [
