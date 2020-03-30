@@ -5,8 +5,7 @@ from nets.pose_net import pose_exp_net
 from monodepth_model import disp_godard
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
 from nets.pwc_disp import feature_pyramid_disp
-from optical_flow_warp_fwd import transformerFwd
-from core_warp import inv_warp_flow
+from core_warp import inv_warp_flow, fwd_warp_flow
 from monodepth_dataloader import get_multi_scale_intrinsics
 from utils import inverse_warp, inverse_warp_new
 from loss_utils import SSIM, deprocess_image, preprocess_image,\
@@ -114,17 +113,7 @@ class Model_flow(object):
             optical_flows_rev = construct_model_pwc_full(image2, image1,
                                                          feature2, feature1)
 
-        occu_masks = [
-            tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[batch_size, H // (2**s), W // (2**s), 1],
-                        dtype='float32'),
-                    flowr, [H // (2**s), W // (2**s)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0)
-            for s, flowr in enumerate(optical_flows_rev)
-        ]
+        occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         pixel_loss_optical = 0
         flow_smooth_loss = 0
@@ -265,17 +254,7 @@ class Model_depth(object):
             optical_flows_rev = construct_model_pwc_full(
                 image2, image1, feature2_flow, feature1_flow)
 
-        occu_masks = [
-            tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[batch_size, H // (2**s), W // (2**s), 1],
-                        dtype='float32'),
-                    flowr, [H // (2**s), W // (2**s)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0)
-            for s, flowr in enumerate(optical_flows_rev)
-        ]
+        occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         pixel_loss_depth = 0
         tgt_image_all = []
@@ -459,17 +438,7 @@ class Model_depthflow(object):
             optical_flows = construct_model_pwc_full(
                 image1, image2, feature1_flow, feature2_flow)
 
-        occu_masks = [
-            tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[batch_size, H // (2**s), W // (2**s), 1],
-                        dtype='float32'),
-                    flowr, [H // (2**s), W // (2**s)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0)
-            for s, flowr in enumerate(optical_flows_rev)
-        ]
+        occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         _, pose_mat, _, _ = inverse_warp_new(
             1.0 / pred_disp[0][:, :, :, 0:1], 1.0 /
@@ -666,19 +635,7 @@ class Model_eval_depthflow(object):
             optical_flows_rev = construct_model_pwc_full(
                 input_2, input_1, feature2_flow, feature1_flow)
 
-            s = 0
-            occu_mask = tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[
-                            1, opt.img_height // (2**s),
-                            opt.img_width // (2**s), 1
-                        ],
-                        dtype='float32'),
-                    optical_flows_rev[s],
-                    [opt.img_height // (2**s), opt.img_width // (2**s)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0)
+            occu_mask = tf.clip_by_value(fwd_warp_flow(1, optical_flows_rev[0]), 0, 1)
 
             depth_flow, pose_mat, disp1_trans, small_mask = inverse_warp_new(
                 1.0 / pred_disp[0][:, :, :, 0:1],

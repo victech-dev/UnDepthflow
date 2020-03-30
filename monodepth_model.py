@@ -20,8 +20,7 @@ import tensorflow.contrib.slim as slim
 
 from autoflags import opt
 from nets.pwc_disp import pwc_disp
-from core_warp import inv_warp_flow
-from optical_flow_warp_fwd import transformerFwd
+from core_warp import inv_warp_flow, fwd_warp_flow
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -166,31 +165,8 @@ class MonodepthModel(object):
             for i in range(4)
         ]
 
-        self.right_occ_mask = [
-            tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[
-                            opt.batch_size, H // (2**i), W // (2**i), 1
-                        ],
-                        dtype='float32'),
-                    self.ltr_flow[i], [H // (2**i), W // (2**i)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0) for i in range(4)
-        ]
-
-        self.left_occ_mask = [
-            tf.clip_by_value(
-                transformerFwd(
-                    tf.ones(
-                        shape=[
-                            opt.batch_size, H // (2**i), W // (2**i), 1
-                        ],
-                        dtype='float32'),
-                    self.rtl_flow[i], [H // (2**i), W // (2**i)]),
-                clip_value_min=0.0,
-                clip_value_max=1.0) for i in range(4)
-        ]
+        self.right_occ_mask = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in self.ltr_flow]
+        self.left_occ_mask = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in self.rtl_flow]
 
         self.right_occ_mask_avg = [
             tf.reduce_mean(self.right_occ_mask[i]) + 1e-12 for i in range(4)
