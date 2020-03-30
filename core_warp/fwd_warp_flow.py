@@ -69,7 +69,7 @@ def fwd_warp_flow(image, flo, name='fwd_warp_flow', backprop=False):
 
     with tf.name_scope(name):
         image = tf.convert_to_tensor(image, dtype=tf.float32)
-        if tf.rank(image) == 0:
+        if len(image.shape) == 0:
             image = tf.ones_like(flo[:,:,:,0:1]) * image
         B, H, W, _ = tf.unstack(tf.shape(image))
         Hf, Wf = tf.cast(H, tf.float32), tf.cast(W, tf.float32)

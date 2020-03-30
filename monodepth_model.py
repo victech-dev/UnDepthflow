@@ -365,5 +365,7 @@ def disp_godard(left_img, right_img, left_feature, right_feature, is_training=Tr
         outputs['lr_loss'] = model.lr_loss
         outputs['left_occ_mask'] = model.left_occ_mask
         outputs['right_occ_mask'] = model.right_occ_mask
+        outputs['left_pyramid'] = model.left_pyramid
+        outputs['right_pyramid'] = model.right_pyramid
     return outputs
 
