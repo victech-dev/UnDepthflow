@@ -1,34 +1,46 @@
+$restart_session = @"
+echo '* Sending 1st INT signal to previous job';
+tmux send-keys -t vtlearn:0 C-c &> /dev/null;
+sleep 3;
+echo '* Sending 2nd INT signal to previous job';
+tmux send-keys -t vtlearn:0 C-c &> /dev/null;
+sleep 3;
+echo '* Kill previous tmux session';
+tmux kill-session -t vtlearn &> /dev/null;
+sleep 3;
+tmux ls;
+echo '* Create new tmux session';
+tmux new-session -d -s vtlearn;
+tmux ls
+"@
+
 $cmd00 = @"
 cd /workspace/UnDepthflow;
 git pull;
-tmux kill-session -t sehee &> /dev/null;
-tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.2 2> tlog.txt' Enter;
+$restart_session;
+tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.3 2> tlog.txt' Enter;
 "@
 
 $cmd01 = @"
 cd /workspace/UnDepthflow;
 git pull;
-tmux kill-session -t sehee &> /dev/null;
-tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.4 2> tlog.txt' Enter;
+$restart_session;
+tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.4 2> tlog.txt' Enter;
 "@
 
 $cmd02 = @"
 cd /workspace/UnDepthflow;
 git pull;
-tmux kill-session -t sehee &> /dev/null;
-tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.6 2> tlog.txt' Enter;
+$restart_session;
+tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.5 2> tlog.txt' Enter;
 "@
 
 $cmd99 = @"
 cd /workspace/UnDepthflow;
 git pull;
-tmux kill-session -t sehee &> /dev/null;
-tmux new-session -d -s sehee;
-tmux send-keys -t sehee:0 '. activate vt-learn' Enter;
-tmux send-keys -t sehee:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.8 2> tlog.txt' Enter;
+$restart_session;
+tmux send-keys -t vtlearn:0 '. activate vt-learn' Enter;
+tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.6 2> tlog.txt' Enter;
 "@
 
 

@@ -2,8 +2,20 @@
 
 $cmd = @"
 cd /workspace/UnDepthflow;
+echo '* Sending 1st INT signal to previous job';
+tmux send-keys -t vtlearn:0 C-c &> /dev/null;
+sleep 3;
+echo '* Sending 2nd INT signal to previous job';
+tmux send-keys -t vtlearn:0 C-c &> /dev/null;
+sleep 3;
+echo '* Kill previous tmux session';
+tmux kill-session -t vtlearn &> /dev/null;
+sleep 3;
+tmux ls;
+echo '* Removing results directories';
 rm -rf .results*
 "@
+
 
 $confirmation = Read-Host "Are you Sure You Want To Clean All (say yes)"
 if ($confirmation -eq 'yes') {
