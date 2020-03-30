@@ -98,7 +98,7 @@ class MonodepthModel(object):
         def _weights(s, img): # Iy,Ix vanila gradient
             g = tf.stack(tf.image.image_gradients(img), axis=-1) # [B,H,W,C,(dy,dx)]
             g = tf.reduce_mean(tf.abs(g), axis=3) # [B,H,W,(dy,dx)]
-            return tf.exp(-WEIGHT_COEFFS[s]*g)
+            return tf.exp(-10*WEIGHT_COEFFS[s]*g)
         disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
         disp = [d / m for d, m in zip(disp, disp_mean)]
         loss = [_loss(s, d) for s, d in enumerate(disp)]
