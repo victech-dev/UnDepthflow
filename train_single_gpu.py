@@ -149,7 +149,6 @@ def train(Model, Model_eval, opt):
             # Launch tensorboard
             if itr == 16:
                 from launch_tensorboard import launch_tensorboard
-                summary_writer.flush()
                 launch_tensorboard(opt.trace)
                 print('*** Tensorboard launched')
 
