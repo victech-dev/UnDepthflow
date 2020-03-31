@@ -34,7 +34,6 @@ flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
 
 flags.DEFINE_float("depth_smooth_weight", 0.5, "Weight for depth smoothness")
-flags.DEFINE_string("smooth_mode", 'sehee', "monodepth2/undepthflow/sehee")
 
 flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
 flags.DEFINE_float("flow_smooth_weight", 10.0, "Weight for flow smoothness")
@@ -90,10 +89,5 @@ def autoflags():
             trace = path_fix_existing(trace)
         opt.trace = str(trace)
     print('*** Output path:', opt.trace)
-
-    if opt.smooth_mode in ['monodepth2', 'undepthflow', 'sehee']:
-        print('*** Smooth mode:', opt.smooth_mode, f'(weight={opt.depth_smooth_weight})')
-    else:
-        raise ValueError("Invalid smooth mode")
 
     return Model, Model_eval

@@ -67,62 +67,24 @@ class MonodepthModel(object):
     def generate_transformed(self, img, flow, scale):
         return inv_warp_flow(img, flow)
 
-    ''' undepthflow (with disp norm, index bug fixed) '''
-    def get_disparity_smoothness_2nd(self, disp, pyramid):
-        LOSS_COEFFS = [1.0, 0.28772402, 0.10591773, 0.04457521]
-        WEIGHT_COEFFS = [1.0, 0.7, 0.5, 0.33]
-        def _loss(s, gray): # Iyy,Ixx
-            g = tf.concat(tf.image.image_gradients(gray), axis=-1) # [B,H,W,(dy,dx)]
-            iyy = tf.image.image_gradients(g[:,:,:,0:1])[0]
-            ixx = tf.image.image_gradients(g[:,:,:,1:2])[1]
-            iyyixx = tf.concat([tf.roll(iyy, 1, axis=1), tf.roll(ixx, 1, axis=2)], axis=-1)
-            return LOSS_COEFFS[s]*iyyixx
-        def _weights(s, img): # Iy,Ix
-            g = tf.stack(tf.image.image_gradients(img), axis=-1) # [B,H,W,C,(dy,dx)]
-            g = tf.reduce_mean(tf.abs(g), axis=3) # [B,H,W,(dy,dx)]
-            return tf.exp(-10*WEIGHT_COEFFS[s]*g)
-        disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
-        disp = [d / m for d, m in zip(disp, disp_mean)]
-        loss = [_loss(s, d) for s, d in enumerate(disp)]
-        weights = [_weights(s, img) for s, img in enumerate(pyramid)]
-        return [l*w for l, w in zip(loss, weights)] # [batch, height, width, 2]
-
-    ''' monodepth2 version (with disp norm) '''
-    def get_disparity_smoothness_monodepth2(self, disp, pyramid):
-        # same as monodepth, index bug fixed
-        LOSS_COEFFS = [1.0, 0.46514253, 0.22323016, 0.10952386]
-        WEIGHT_COEFFS = [1.0, 0.6, 0.4, 0.3]
-        def _loss(s, gray): # Iy,Ix vanila gradient
-            g = tf.concat(tf.image.image_gradients(gray), axis=-1) # [B,H,W,(dy,dx)]
-            return LOSS_COEFFS[s]*g
-        def _weights(s, img): # Iy,Ix vanila gradient
-            g = tf.stack(tf.image.image_gradients(img), axis=-1) # [B,H,W,C,(dy,dx)]
-            g = tf.reduce_mean(tf.abs(g), axis=3) # [B,H,W,(dy,dx)]
-            return tf.exp(-10*WEIGHT_COEFFS[s]*g)
-        disp_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in disp]
-        disp = [d / m for d, m in zip(disp, disp_mean)]
-        loss = [_loss(s, d) for s, d in enumerate(disp)]
-        weights = [_weights(s, img) for s, img in enumerate(pyramid)]
-        return [l*w for l, w in zip(loss, weights)] # [batch, height, width, 2]
-
-    ''' depth smoothness version of undepthflow (with depth norm) '''
-    def get_disparity_smoothness_2nd_v2(self, disp, pyramid):
+    ''' exp(-[Iy,Ix]) * [Dyy,Dxx], D is normalized depth '''
+    def get_disparity_smoothness(self, disp, pyramid):
         LOSS_COEFFS = [1.0, 0.32506809, 0.13110368, 0.06063714]
         WEIGHT_COEFFS = [1.0, 0.7, 0.5, 0.33]
-        def _loss(s, gray): # Iyy,Ixx as Laplacian
+        def _loss(s, gray): # Dyy, Dxx by applying 1D Laplacian filter
             # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
             fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
             filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
             i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
             iyyixx = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
             return LOSS_COEFFS[s]*iyyixx # [B,H,W,(dyy,dxx)]
-        def _weights(s, img): # Iy,Ix as Sobel
+        def _weights(s, img): # Iy, Ix by Sobel filter
             # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
             rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
             sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
             sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
             sobel_abs = tf.abs(sobel_weighted)
-            g = tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (dy,dx)]
+            g = tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (iy,ix)]
             return tf.exp(-WEIGHT_COEFFS[s]*g)
         depth = [1.0 / (d+1e-3) for d in disp]
         depth_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in depth]
@@ -203,21 +165,10 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            if opt.smooth_mode == 'monodepth2':
-                self.disp_left_smoothness = self.get_disparity_smoothness_monodepth2(
-                    self.disp_left_est, self.left_pyramid)
-                self.disp_right_smoothness = self.get_disparity_smoothness_monodepth2(
-                    self.disp_right_est, self.right_pyramid)
-            elif opt.smooth_mode == 'undepthflow':
-                self.disp_left_smoothness = self.get_disparity_smoothness_2nd(
-                    self.disp_left_est, self.left_pyramid)
-                self.disp_right_smoothness = self.get_disparity_smoothness_2nd(
-                    self.disp_right_est, self.right_pyramid)
-            elif opt.smooth_mode == 'sehee':
-                self.disp_left_smoothness = self.get_disparity_smoothness_2nd_v2(
-                    self.disp_left_est, self.left_pyramid)
-                self.disp_right_smoothness = self.get_disparity_smoothness_2nd_v2(
-                    self.disp_right_est, self.right_pyramid)
+            self.disp_left_smoothness = self.get_disparity_smoothness(
+                self.disp_left_est, self.left_pyramid)
+            self.disp_right_smoothness = self.get_disparity_smoothness(
+                self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):

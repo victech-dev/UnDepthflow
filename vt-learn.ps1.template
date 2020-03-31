@@ -18,21 +18,21 @@ $cmd00 = @"
 cd /workspace/UnDepthflow;
 git pull;
 $restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.3 2> tlog.txt' Enter;
+tmux send-keys -t vtlearn:0 'python3 main.py --depth_smooth_weight=0.3 2> tlog.txt' Enter;
 "@
 
 $cmd01 = @"
 cd /workspace/UnDepthflow;
 git pull;
 $restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.4 2> tlog.txt' Enter;
+tmux send-keys -t vtlearn:0 'python3 main.py --depth_smooth_weight=0.4 2> tlog.txt' Enter;
 "@
 
 $cmd02 = @"
 cd /workspace/UnDepthflow;
 git pull;
 $restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.5 2> tlog.txt' Enter;
+tmux send-keys -t vtlearn:0 'python3 main.py --depth_smooth_weight=0.5 2> tlog.txt' Enter;
 "@
 
 $cmd99 = @"
@@ -40,7 +40,7 @@ cd /workspace/UnDepthflow;
 git pull;
 $restart_session;
 tmux send-keys -t vtlearn:0 '. activate vt-learn' Enter;
-tmux send-keys -t vtlearn:0 'python3 main.py --smooth_mode=sehee --depth_smooth_weight=0.6 2> tlog.txt' Enter;
+tmux send-keys -t vtlearn:0 'python3 main.py --depth_smooth_weight=0.6 2> tlog.txt' Enter;
 "@
 
 
