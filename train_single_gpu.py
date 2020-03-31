@@ -34,7 +34,14 @@ def train(Model, Model_eval, opt):
         print('*** Constructing models and inputs.')
         global_step = tf.Variable(0, trainable=False)
         lr = tf.placeholder(tf.float32, name='learning_rate')
-        optimizer = tf.train.AdamOptimizer(lr)
+        if opt.optimizer == 'adam':
+            optimizer = tf.train.AdamOptimizer(lr)
+            print('*** Optimizer: adam')
+        elif opt.optimizer == 'rmsprop':
+            optimizer = tf.train.RMSPropOptimizer(lr)
+            print('*** Optimizer: rmsprop ')
+        else:
+            raise ValueError("Invalid optimizer")
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
