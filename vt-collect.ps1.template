@@ -1,23 +1,55 @@
+$prefix = ".results_{0}" -f (Get-Date -Format "MM-dd-HH-mm")
+
 function collect {
     Param([int]$idx, [string]$remote)
     $name = "VT-Learner-{0:d2}" -f $idx
-    $dst = ".results{0:d2}" -f $idx
-
+    $dst = Join-Path -Path $prefix -ChildPath $name
     Write-Host "Collecting from $name to $dst ..." -ForegroundColor Green		
     Remove-Item $dst -Force -Recurse -ErrorAction SilentlyContinue
     mkdir $dst | Out-Null
     plink -load $name -batch "cd /workspace/UnDepthflow; tar -cvf results.tar .results_*"
     pscp -load $name -batch -r "${remote}:/workspace/UnDepthflow/results.tar" "${dst}/results.tar"
     tar -xvf "$dst/results.tar" -C $dst
-    del "$dst/results.tar"
+    Remove-Item "$dst/results.tar"
     plink -load $name -batch "rm -f /workspace/UnDepthflow/results.tar"
+}
+
+function all_unique {
+    ForEach($outer in (Get-ChildItem -Path $prefix -Directory)) {
+        ForEach($inner in (Get-ChildItem -Path $outer.FullName -Directory)) {
+            $count = (Get-ChildItem -Path $prefix -Filter $inner.Name -Directory -Recurse | Measure-Object).Count
+            if ($count -gt 1) { return $false }
+        }
+    }
+    return $true
+}
+
+function merge {
+    $unique = all_unique
+    $outer_list = Get-ChildItem -Path $prefix -Directory
+    ForEach($outer in $outer_list) {
+        $inner_list = Get-ChildItem -Path $outer.FullName -Directory
+        ForEach($inner in $inner_list) {
+            if ($unique -eq $true) { 
+                $tgt = Join-Path -Path $prefix -ChildPath $inner.Name 
+            }
+            else {
+                $trimmed = $inner.Name.TrimStart('.')
+                $tgt = Join-Path -Path $prefix -ChildPath "$($outer.Name)-$trimmed" 
+            }
+            Move-Item -Path $inner.FullName -Destination $tgt
+        }
+        Remove-Item $outer.FullName -Force -Recurse -ErrorAction SilentlyContinue
+    }
 }
 
 collect 0 "dev@192.168.2.50"
 collect 1 "dev@192.168.2.51"
 collect 2 "dev@192.168.2.52"
 collect 99 "ubuntu@14.49.44.113"
+merge
 
 conda activate pydc
+Set-Location $prefix
 Start-Process "chrome.exe" "http://localhost:6006"
 tensorboard --logdir .
