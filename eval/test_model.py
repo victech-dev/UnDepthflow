@@ -1,9 +1,12 @@
 import tensorflow as tf
 import numpy as np
+import cv2
+import os
 
 from autoflags import opt
 import imgtool
-from eval.evaluate_flow import scale_intrinsics
+from eval.evaluate_flow import get_scaled_intrinsic_matrix, scale_intrinsics
+from eval.evaluation_utils import width_to_focal
 from monodepth_dataloader import get_multi_scale_intrinsics
 
 ''' VICTECH
@@ -30,8 +33,8 @@ class TestModel(object):
                 self.cam2pix, self.pix2cam, reuse_scope=False, scope=scope)
             self.outputs = self.model.outputs
 
-    def __call__(self, sess, img1, img2, img1r, img2r, K):
-        orig_H, orig_W = img1.shape[0:2]
+    def __call__(self, sess, img1, img2, img1r, img2r, K, queries=None):
+        H0, W0 = img1.shape[0:2]
         img1 = imgtool.imresize(img1, (opt.img_height, opt.img_width))
         img2 = imgtool.imresize(img2, (opt.img_height, opt.img_width))
         img1r = imgtool.imresize(img1r, (opt.img_height, opt.img_width))
@@ -46,8 +49,33 @@ class TestModel(object):
         img1r = (img1r / 255).astype(np.float32)
         img2r = (img2r / 255).astype(np.float32)
 
-        K = scale_intrinsics(K, opt.img_width / orig_W, opt.img_height / orig_H)
-        outputs = sess.run(self.model.outputs, 
+        K = scale_intrinsics(K, opt.img_width / W0, opt.img_height / H0)
+        outputs = sess.run(self.model.outputs if queries is None else queries, 
                 feed_dict = {self.image1: img1, self.image2: img2, 
                 self.image1r: img1r, self.image2r: img2r, self.intrinsic: K})
         return outputs
+
+    def predict_depth(self, sess, image1, image2, image1r, image2r, K, fxb):
+        height, width = image1.shape[:2] # original height, width
+        # session run
+        query = self.outputs['stereo']['disp'][0] # [1, H, W, (ltr,rtl)]
+        disp0 = self(sess, image1, image2, image1r, image2r, K, query)
+        pred_disp = disp0[0,:,:,0:1]
+        # depth from disparity
+        pred_disp = width * cv2.resize(pred_disp, (width, height))
+        pred_depth = fxb / pred_disp
+        return pred_depth
+
+    def predict_depth_gt_2015(self, sess, i):
+        gt_dir = opt.gt_2015_dir
+        img1 = imgtool.imread(os.path.join(gt_dir, "image_2", f"{i:06}_10.png"))
+        img2 = imgtool.imread(os.path.join(gt_dir, "image_2", f"{i:06}_11.png"))
+        img1r = imgtool.imread(os.path.join(gt_dir, "image_3", f"{i:06}_10.png"))
+        img2r = imgtool.imread(os.path.join(gt_dir, "image_3", f"{i:06}_10.png"))
+        K = get_scaled_intrinsic_matrix(os.path.join(gt_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
+        fxb = width_to_focal[img1.shape[1]] * 0.54
+        depth = self.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
+        return img1, depth, K
+
+        
+

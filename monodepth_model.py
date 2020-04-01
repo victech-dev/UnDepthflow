@@ -64,9 +64,6 @@ class MonodepthModel(object):
     def generate_flow_right(self, disp, scale):
         return self.generate_flow_left(-disp, scale)
 
-    def generate_transformed(self, img, flow, scale):
-        return inv_warp_flow(img, flow)
-
     ''' exp(-[Iy,Ix]) * [Dyy,Dxx], D is normalized depth '''
     def get_disparity_smoothness(self, disp, pyramid):
         LOSS_COEFFS = [1.0, 0.32506809, 0.13110368, 0.06063714]
@@ -123,8 +120,7 @@ class MonodepthModel(object):
             self.generate_flow_left(self.disp_left_est[i], i) for i in range(4)
         ]
         self.rtl_flow = [
-            self.generate_flow_right(self.disp_right_est[i], i)
-            for i in range(4)
+            self.generate_flow_right(self.disp_right_est[i], i) for i in range(4)
         ]
 
         self.right_occ_mask = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in self.ltr_flow]
@@ -139,29 +135,13 @@ class MonodepthModel(object):
 
         # GENERATE IMAGES
         with tf.variable_scope('images'):
-            self.left_est = [
-                self.generate_transformed(self.right_pyramid[i],
-                                          self.ltr_flow[i], i)
-                for i in range(4)
-            ]
-            self.right_est = [
-                self.generate_transformed(self.left_pyramid[i],
-                                          self.rtl_flow[i], i)
-                for i in range(4)
-            ]
+            self.left_est = [inv_warp_flow(img, f) for img, f in zip(self.right_pyramid, self.ltr_flow)]
+            self.right_est = [inv_warp_flow(img, f) for img, f in zip(self.left_pyramid, self.rtl_flow)]
 
         # LR CONSISTENCY
         with tf.variable_scope('left-right'):
-            self.right_to_left_disp = [
-                self.generate_transformed(self.disp_right_est[i],
-                                          self.ltr_flow[i], i)
-                for i in range(4)
-            ]
-            self.left_to_right_disp = [
-                self.generate_transformed(self.disp_left_est[i],
-                                          self.rtl_flow[i], i)
-                for i in range(4)
-            ]
+            self.right_to_left_disp = [inv_warp_flow(disp, f) for disp, f in zip(self.disp_right_est, self.ltr_flow)]
+            self.left_to_right_disp = [inv_warp_flow(disp, f) for disp, f in zip(self.disp_left_est, self.rtl_flow)]
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
@@ -230,7 +210,7 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + opt.depth_smooth_weight * self.disp_gradient_loss + 1.0 * self.lr_loss
+            self.total_loss = self.image_loss + opt.depth_smooth_weight * self.disp_gradient_loss + opt.lr_loss_weight * self.lr_loss
 
     def build_summaries(self):
         # SUMMARIES

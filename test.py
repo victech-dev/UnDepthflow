@@ -12,41 +12,13 @@ from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
 from eval.test_model import TestModel
 
-def predict_depth_single(sess, model, image1, image2, image1r, image2r, K, fxb):
-    height, width = image1.shape[:2] # original height, width
-    # session run
-    outputs = model(sess, image1, image2, image1r, image2r, K)
-    disp0 = outputs['stereo']['disp'][0] # [1, H, W, (ltr,rtl)]
-    pred_disp = disp0[0,:,:,0:1]
-    # depth from disparity
-    pred_disp = width * cv2.resize(pred_disp, (width, height))
-    pred_depth = fxb / pred_disp
-    return pred_depth
-
-def predict_depth_single_gt_2015(sess, model, i):
-    gt_dir = opt.gt_2015_dir
-    img1 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_10.png"))
-    img2 = imgtool.imread(os.path.join(gt_dir, "image_2", str(i).zfill(6) + "_11.png"))
-    img1r = imgtool.imread(os.path.join(gt_dir, "image_3", str(i).zfill(6) + "_10.png"))
-    img2r = imgtool.imread(os.path.join(gt_dir, "image_3", str(i).zfill(6) + "_11.png"))
-    K = get_scaled_intrinsic_matrix(os.path.join(gt_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
-    fxb = width_to_focal[img1.shape[1]] * 0.54
-    depth = predict_depth_single(sess, model, img1, img2, img1r, img2r, K, fxb)
-    # import time
-    # time0 = time.time()
-    # for _ in range(1000):
-    #     predict_depth_single(sess, model, img1, img2, img1r, img2r, K, fxb)
-    # time1 = time.time()
-    # print("**** 1000 elapsed:", time1 - time0)
-    return img1, depth, K
-
 def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
     K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
     K = np.array(K).reshape(3,3)
     fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
-    depth = predict_depth_single(sess, model, imgL, imgL, imgR, imgR, K, fxb)
+    depth = model.predict_depth(sess, imgL, imgL, imgR, imgR, K, fxb)
     return imgL, depth, K
 
 def create_axis_bar():
@@ -132,7 +104,7 @@ def main(unused_argv):
 
         # # point cloud test of KITTI 2015 gt
         for i in range(200):
-            img, depth, K = predict_depth_single_gt_2015(sess, model, i)
+            img, depth, K = model.predict_depth_gt_2015(sess, i)
             show_pcd(img, depth, K)
 
         # # point cloud test of office image
