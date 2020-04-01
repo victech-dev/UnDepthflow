@@ -57,12 +57,13 @@ def count_weights():
     print("*** Total weight count:", np.sum(sizes))
 
 def show_pcd(img, depth, K):
+    H, W = img.shape[:2]
     if hasattr(show_pcd, 'axisbar'):
         axisbar = getattr(show_pcd, 'axisbar')
     else:
         axisbar = create_axis_bar()
         setattr(show_pcd, 'axisbar', axisbar)
-    py, px = np.mgrid[:img.shape[0],:img.shape[1]]
+    py, px = np.mgrid[:H,:W]
     depth = np.clip(depth, 0, 100) # some clipping required here
     xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
     xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
