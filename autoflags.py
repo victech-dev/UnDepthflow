@@ -18,7 +18,6 @@ flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
 flags.DEFINE_string('pretrained_model', '', 'filepath of a pretrained model to initialize from.')
 flags.DEFINE_string('mode', 'stereo', 'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
-flags.DEFINE_string("optimizer", 'adam', "adam or rmsprop")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')
 flags.DEFINE_string('train_file', './filenames/kitti_train_files_png_4frames.txt', 'training file')
