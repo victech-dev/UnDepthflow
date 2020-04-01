@@ -11,6 +11,12 @@ from utils import inverse_warp, inverse_warp_new
 from loss_utils import SSIM, deprocess_image, preprocess_image,\
   cal_grad2_error_mask, charbonnier_loss, cal_grad2_error
 
+def scale_pyramid(img):
+    downsample = tf.keras.layers.AveragePooling2D(2)
+    scaled_imgs = [img]
+    for _ in range(1, opt.num_scales):
+        scaled_imgs.append(downsample(scaled_imgs[-1]))
+    return scaled_imgs
 
 class Model_stereo(object):
     def __init__(self,
@@ -117,8 +123,8 @@ class Model_flow(object):
 
         pixel_loss_optical = 0
         flow_smooth_loss = 0
-        tgt_image_all = []
-        src_image_all = []
+        tgt_image_all = scale_pyramid(image1)
+        src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
         proj_error_depth_all = []
         flyout_map_all = []
@@ -126,12 +132,8 @@ class Model_flow(object):
         for s in range(opt.num_scales):
             # Scale the source and target images for computing loss at the 
             # according scale.
-            curr_tgt_image = tf.image.resize_area(
-                image1,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
-            curr_src_image = tf.image.resize_area(
-                image2,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
+            curr_tgt_image = tgt_image_all[s]
+            curr_src_image = src_image_all[s]
 
             occu_mask = occu_masks[s]
             occu_mask_avg = tf.reduce_mean(occu_mask)
@@ -152,8 +154,6 @@ class Model_flow(object):
             flow_smooth_loss += opt.flow_smooth_weight * cal_grad2_error(
                 optical_flows[s] / 20.0, curr_tgt_image, 1.0)
 
-            tgt_image_all.append(curr_tgt_image)
-            src_image_all.append(curr_src_image)
             proj_image_depth_all.append(curr_proj_image_optical)
             proj_error_depth_all.append(curr_proj_error_optical)
 
@@ -257,8 +257,8 @@ class Model_depth(object):
         occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         pixel_loss_depth = 0
-        tgt_image_all = []
-        src_image_all = []
+        tgt_image_all = scale_pyramid(image1)
+        src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
         proj_error_depth_all = []
         flyout_map_all = []
@@ -266,12 +266,8 @@ class Model_depth(object):
         for s in range(opt.num_scales):
             # Scale the source and target images for computing loss at the 
             # according scale.
-            curr_tgt_image = tf.image.resize_area(
-                image1,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
-            curr_src_image = tf.image.resize_area(
-                image2,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
+            curr_tgt_image = tgt_image_all[s]
+            curr_src_image = src_image_all[s]
 
             depth_flow, pose_mat = inverse_warp(
                 pred_depth[s][:, :, :, 0:1],
@@ -295,8 +291,6 @@ class Model_depth(object):
                     SSIM(curr_proj_image_depth * occu_mask, curr_tgt_image *
                          occu_mask)) / occu_mask_avg
 
-            tgt_image_all.append(curr_tgt_image)
-            src_image_all.append(curr_src_image)
             proj_image_depth_all.append(curr_proj_image_depth)
             proj_error_depth_all.append(curr_proj_error_depth)
 
@@ -449,8 +443,8 @@ class Model_depthflow(object):
         pixel_loss_optical = 0
         flow_smooth_loss = 0
         flow_consist_loss = 0
-        tgt_image_all = []
-        src_image_all = []
+        tgt_image_all = scale_pyramid(image1)
+        src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
         proj_error_depth_all = []
         flyout_map_all = []
@@ -459,12 +453,8 @@ class Model_depthflow(object):
             occu_mask = occu_masks[s]
             # Scale the source and target images for computing loss at the 
             # according scale.
-            curr_tgt_image = tf.image.resize_area(
-                image1,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
-            curr_src_image = tf.image.resize_area(
-                image2,
-                [int(opt.img_height / (2**s)), int(opt.img_width / (2**s))])
+            curr_tgt_image = tgt_image_all[s]
+            curr_src_image = src_image_all[s]
 
             depth_flow, pose_mat = inverse_warp(
                 pred_depth[s][:, :, :, 0:1],
@@ -534,8 +524,6 @@ class Model_depthflow(object):
             flow_consist_loss += opt.flow_consist_weight * charbonnier_loss(
                 depth_flow_stop - optical_flows[s], ref_exp_mask)
 
-            tgt_image_all.append(curr_tgt_image)
-            src_image_all.append(curr_src_image)
             proj_image_depth_all.append(curr_proj_image_depth)
             proj_error_depth_all.append(curr_proj_error_depth)
 
