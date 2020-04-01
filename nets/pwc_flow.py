@@ -118,6 +118,8 @@ def context_net(inputs):
 def construct_model_pwc_full(image1, image2, feature1, feature2):
     with tf.variable_scope('flow_net'):
         batch_size, H, W, color_channels = map(int, image1.get_shape()[0:4])
+        upsampling_x2 = tf.keras.layers.UpSampling2D(size=2, interpolation='bilinear')
+        upsampling_x4 = tf.keras.layers.UpSampling2D(size=4, interpolation='bilinear')
 
         #############################
         feature1_1, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = feature1
@@ -126,8 +128,7 @@ def construct_model_pwc_full(image1, image2, feature1, feature2):
         cv6 = cost_volumn(feature1_6, feature2_6, d=4)
         flow6, _ = optical_flow_decoder_dc(cv6, level=6)
 
-        flow6to5 = tf.image.resize_bilinear(flow6,
-                                            [H // (2**5), (W // (2**5))]) * 2.0
+        flow6to5 = upsampling_x2(flow6) * 2.0
         feature2_5w = inv_warp_flow(feature2_5, flow6to5)
         cv5 = cost_volumn(feature1_5, feature2_5w, d=4)
         flow5, _ = optical_flow_decoder_dc(
@@ -135,8 +136,7 @@ def construct_model_pwc_full(image1, image2, feature1, feature2):
                 [cv5, feature1_5, flow6to5], axis=3), level=5)
         flow5 = flow5 + flow6to5
 
-        flow5to4 = tf.image.resize_bilinear(flow5,
-                                            [H // (2**4), (W // (2**4))]) * 2.0
+        flow5to4 = upsampling_x2(flow5) * 2.0
         feature2_4w = inv_warp_flow(feature2_4, flow5to4)
         cv4 = cost_volumn(feature1_4, feature2_4w, d=4)
         flow4, _ = optical_flow_decoder_dc(
@@ -144,8 +144,7 @@ def construct_model_pwc_full(image1, image2, feature1, feature2):
                 [cv4, feature1_4, flow5to4], axis=3), level=4)
         flow4 = flow4 + flow5to4
 
-        flow4to3 = tf.image.resize_bilinear(flow4,
-                                            [H // (2**3), (W // (2**3))]) * 2.0
+        flow4to3 = upsampling_x2(flow4) * 2.0
         feature2_3w = inv_warp_flow(feature2_3, flow4to3)
         cv3 = cost_volumn(feature1_3, feature2_3w, d=4)
         flow3, _ = optical_flow_decoder_dc(
@@ -153,8 +152,7 @@ def construct_model_pwc_full(image1, image2, feature1, feature2):
                 [cv3, feature1_3, flow4to3], axis=3), level=3)
         flow3 = flow3 + flow4to3
 
-        flow3to2 = tf.image.resize_bilinear(flow3,
-                                            [H // (2**2), (W // (2**2))]) * 2.0
+        flow3to2 = upsampling_x2(flow3) * 2.0
         feature2_2w = inv_warp_flow(feature2_2, flow3to2)
         cv2 = cost_volumn(feature1_2, feature2_2w, d=4)
         flow2_raw, f2 = optical_flow_decoder_dc(
@@ -164,9 +162,9 @@ def construct_model_pwc_full(image1, image2, feature1, feature2):
 
         flow2 = context_net(tf.concat([flow2_raw, f2], axis=3)) + flow2_raw
 
-        flow0_enlarge = tf.image.resize_bilinear(flow2 * 4.0, [H, W])
-        flow1_enlarge = tf.image.resize_bilinear(flow3 * 4.0, [H // 2, W // 2])
-        flow2_enlarge = tf.image.resize_bilinear(flow4 * 4.0, [H // 4, W // 4])
-        flow3_enlarge = tf.image.resize_bilinear(flow5 * 4.0, [H // 8, W // 8])
+        flow0_enlarge = upsampling_x4(flow2 * 4.0) # 1/4 -> 1
+        flow1_enlarge = upsampling_x4(flow3 * 4.0) # 1/8 -> 1/2
+        flow2_enlarge = upsampling_x4(flow4 * 4.0) # 1/16 -> 1/4
+        flow3_enlarge = upsampling_x4(flow5 * 4.0) # 1/32 -> 1/8
 
         return flow0_enlarge, flow1_enlarge, flow2_enlarge, flow3_enlarge
