@@ -41,15 +41,10 @@ class MonodepthModel(object):
         self.build_losses()
 
     def scale_pyramid(self, img, num_scales):
+        downsample = tf.keras.layers.AveragePooling2D(2)
         scaled_imgs = [img]
-        s = tf.shape(img)
-        h = s[1]
-        w = s[2]
-        for i in range(num_scales - 1):
-            ratio = 2**(i + 1)
-            nh = h // ratio
-            nw = w // ratio
-            scaled_imgs.append(tf.image.resize_area(img, [nh, nw]))
+        for _ in range(1, num_scales):
+            scaled_imgs.append(downsample(scaled_imgs[-1]))
         return scaled_imgs
 
     def generate_flow_left(self, disp, scale):
