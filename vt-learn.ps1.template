@@ -1,6 +1,6 @@
 function gen_cmd {
     Param([string]$opt, [string]$env)
-    $activate = if ($env) { ". activate $env" } else { "" }
+    $activate_with_semicolon = if ($env) { ". activate $env;" } else { "" }
 
 $output = @"
 cd /workspace/UnDepthflow/;
@@ -15,10 +15,10 @@ tmux ls;
 echo '* Create new tmux session';
 tmux new-session -d -s vtlearn;
 tmux ls;
-tmux send-keys -t vtlearn:0 '$activate; python3 main.py $opt 2> tlog.txt' Enter;
+tmux send-keys -t vtlearn:0 '$activate_with_semicolon python3 main.py $opt 2> tlog.txt' Enter;
 echo '* Training script started';
 tmux split-window -t vtlearn:0 -v;
-tmux send-keys -t vtlearn:0 '$activate; tensorboard --logdir .' Enter;
+tmux send-keys -t vtlearn:0 '$activate_with_semicolon tensorboard --logdir .' Enter;
 echo '* Tensorboard started';
 tmux select-pane -t vtlearn:0 -U;
 tmux list-pane -t vtlearn:0;
