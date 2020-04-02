@@ -1,48 +1,36 @@
-$restart_session = @"
-echo '* Sending 1st INT signal to previous job';
-tmux send-keys -t vtlearn:0 C-c &> /dev/null;
-sleep 3;
-echo '* Sending 2nd INT signal to previous job';
-tmux send-keys -t vtlearn:0 C-c &> /dev/null;
-sleep 3;
-echo '* Kill previous tmux session';
-tmux kill-session -t vtlearn &> /dev/null;
-sleep 3;
+function gen_cmd {
+    Param([string]$opt, [string]$env)
+    $activate = if ($env) { ". activate $env" } else { "" }
+
+$output = @"
+cd /workspace/UnDepthflow/;
+git pull;
+while tmux has-session -t vtlearn &> /dev/null;
+do echo '* Wait until previous job killed';
+    tmux send-keys -t vtlearn:0 C-c &> /dev/null;
+    sleep 3;
+    tmux send-keys -t vtlearn:0 'exit' Enter &> /dev/null;
+done;
 tmux ls;
 echo '* Create new tmux session';
 tmux new-session -d -s vtlearn;
-tmux ls
+tmux ls;
+tmux send-keys -t vtlearn:0 '$activate; python3 main.py $opt 2> tlog.txt' Enter;
+echo '* Training script started';
+tmux split-window -t vtlearn:0 -v;
+tmux send-keys -t vtlearn:0 '$activate; tensorboard --logdir .' Enter;
+echo '* Tensorboard started';
+tmux select-pane -t vtlearn:0 -U;
+tmux list-pane -t vtlearn:0;
 "@
 
-$cmd00 = @"
-cd /workspace/UnDepthflow;
-git pull;
-$restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --optimizer=adam --depth_smooth_weight=0.5 --trace=.results_stereo_adam_05 2> tlog.txt' Enter;
-"@
+    return $output
+}
 
-$cmd01 = @"
-cd /workspace/UnDepthflow;
-git pull;
-$restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --optimizer=adam --depth_smooth_weight=0.6 --trace=.results_stereo_adam_06 2> tlog.txt' Enter;
-"@
-
-$cmd02 = @"
-cd /workspace/UnDepthflow;
-git pull;
-$restart_session;
-tmux send-keys -t vtlearn:0 'python3 main.py --optimizer=rmsprop --depth_smooth_weight=0.5 --trace=.results_stereo_rmsprop_05 2> tlog.txt' Enter;
-"@
-
-$cmd99 = @"
-cd /workspace/UnDepthflow;
-git pull;
-$restart_session;
-tmux send-keys -t vtlearn:0 '. activate vt-learn' Enter;
-tmux send-keys -t vtlearn:0 'python3 main.py --optimizer=rmsprop --depth_smooth_weight=0.6 --trace=.results_stereo_rmsprop_06 2> tlog.txt' Enter;
-"@
-
+$cmd00 = gen_cmd "--lr_loss_weight=1.0 --trace=.results_stereo_1.0" ""
+$cmd01 = gen_cmd "--lr_loss_weight=2.0 --trace=.results_stereo_2.0" ""
+$cmd02 = gen_cmd "--lr_loss_weight=3.0 --trace=.results_stereo_3.0" ""
+$cmd99 = gen_cmd "--lr_loss_weight=4.0 --trace=.results_stereo_4.0" "vt-learn"
 
 Write-Host "Sending command to VT-Learner-00 ..." -ForegroundColor Green		
 plink -load VT-Learner-00 -batch "$cmd00"
