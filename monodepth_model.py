@@ -48,12 +48,9 @@ class MonodepthModel(object):
         return scaled_imgs
 
     def generate_flow_left(self, disp, scale):
-        batch_size = opt.batch_size
-        H = opt.img_height // (2**scale)
         W = opt.img_width // (2**scale)
-        zero_flow = tf.zeros([batch_size, H, W, 1])
         ltr_flow = -disp * W
-        ltr_flow = tf.concat([ltr_flow, zero_flow], axis=3)
+        ltr_flow = tf.concat([ltr_flow, tf.zeros_like(ltr_flow)], axis=3)
         return ltr_flow
 
     def generate_flow_right(self, disp, scale):
