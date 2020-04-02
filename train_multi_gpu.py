@@ -1,21 +1,20 @@
 import tensorflow as tf
+import numpy as np
+from tqdm import trange
+import sys
 import functools
 
 from monodepth_dataloader_v2 import batch_from_dataset
-
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
-
 from eval_kitti import evaluate_kitti
-from tqdm import trange
-import sys
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
 
 # How often to run a batch through the validation model.
-VAL_INTERVAL = 10000 # 2500
+VAL_INTERVAL = 20000 # 2500
 
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
@@ -31,7 +30,8 @@ def lr_scheduler(lr, prog):
         raise ValueError('Invalid learning rate')
 
 def train(Model, Model_eval, opt):
-    with tf.Graph().as_default(), tf.device('/cpu:0'):
+    with tf.Graph().as_default():
+        print('*** Constructing models and inputs.')
         global_step = tf.Variable(0, trainable=False)
         lr = tf.placeholder(tf.float32, name='learning_rate')
         train_op = tf.train.AdamOptimizer(lr)
