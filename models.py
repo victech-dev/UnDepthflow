@@ -106,8 +106,6 @@ class Model_flow(object):
                  pix2cam=None,
                  reuse_scope=False,
                  scope=None):
-        batch_size, H, W, color_channels = map(int, image1.get_shape()[0:4])
-
         with tf.variable_scope(scope, reuse=reuse_scope):
             feature1 = feature_pyramid_flow(image1, reuse=False)
             feature2 = feature_pyramid_flow(image2, reuse=True)

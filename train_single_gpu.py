@@ -146,12 +146,6 @@ def train(Model, Model_eval, opt):
             if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                 saver.save(sess, opt.trace + '/model', global_step=global_step)
 
-            # Launch tensorboard
-            if itr == 16:
-                from launch_tensorboard import launch_tensorboard
-                launch_tensorboard(opt.trace)
-                print('*** Tensorboard launched')
-
             # Evaluate and write to tensorboard
             if (itr) % (VAL_INTERVAL) == 100:
                 result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
