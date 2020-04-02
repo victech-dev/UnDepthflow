@@ -1,4 +1,5 @@
 import tensorflow as tf
+import functools
 
 from monodepth_dataloader_v2 import batch_from_dataset
 
@@ -6,7 +7,7 @@ from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
 
-from test import test
+from eval_kitti import evaluate_kitti
 from tqdm import trange
 import sys
 
@@ -19,10 +20,21 @@ VAL_INTERVAL = 10000 # 2500
 # How often to save a model checkpoint
 SAVE_INTERVAL = 2500
 
+# Cosine annealing LR Scheduler
+def lr_scheduler(lr, prog):
+    if isinstance(lr, (float, int)):
+        return float(lr)
+    elif isinstance(lr, (list, tuple)):
+        lr_max, lr_min = lr
+        return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(prog * np.pi))
+    else:
+        raise ValueError('Invalid learning rate')
+
 def train(Model, Model_eval, opt):
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         global_step = tf.Variable(0, trainable=False)
-        train_op = tf.train.AdamOptimizer(opt.learning_rate)
+        lr = tf.placeholder(tf.float32, name='learning_rate')
+        train_op = tf.train.AdamOptimizer(lr)
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
 
         split_image1 = tf.split(
@@ -167,6 +179,8 @@ def train(Model, Model_eval, opt):
               None, None, None, None, None
 
         # Run training.
+        print('*** Start training')
+        lr_func = functools.partial(lr_scheduler, opt.learning_rate)
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
             if opt.train_test == "train":
                 _, summary_str = sess.run([apply_gradient_op, summary_op])
@@ -174,12 +188,16 @@ def train(Model, Model_eval, opt):
                 if (itr) % (SUMMARY_INTERVAL) == 2:
                     summary_writer.add_summary(summary_str, itr)
 
-                if (itr) % (SAVE_INTERVAL) == 2:
-                    saver.save(
-                        sess, opt.trace + '/model', global_step=global_step)
+                if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
+                    saver.save(sess, opt.trace + '/model', global_step=global_step)
 
             if (itr) % (VAL_INTERVAL) == 100:
-                test(sess, eval_model, itr, gt_flows_2012, noc_masks_2012,
-                     gt_flows_2015, noc_masks_2015, gt_masks)
+                result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
+                flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
+                summary = tf.Summary()
+                for k, v in flatten:
+                    summary.value.add(tag=k, simple_value=v)
+                summary_writer.add_summary(summary, itr)
+                summary_writer.flush()
 
 
