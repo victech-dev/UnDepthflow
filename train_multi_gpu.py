@@ -55,54 +55,12 @@ def train(Model, Model_eval, opt):
             for i in range(opt.num_gpus):
                 with tf.device(f'/gpu:{i}'):
                     scopename = "train_model" if i == 0 else f'tower_{i}'
-                    with tf.name_scope(scopename) as ns:
+                    with tf.name_scope(scopename):
+                        model = Model(split_image1[i], split_image2[i], 
+                            split_image_r[i], split_image_r_next[i], 
+                            split_cam2pix[i], split_pix2cam[i], reuse_scope=(i > 0), scope=vs)
                         if i == 0:
-                            model = Model(
-                                split_image1[i],
-                                split_image2[i],
-                                split_image_r[i],
-                                split_image_r_next[i],
-                                split_cam2pix[i],
-                                split_pix2cam[i],
-                                reuse_scope=False,
-                                scope=vs)
-                            var_pose = list(
-                                set(
-                                    tf.get_collection(
-                                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                                        scope=".*pose_net.*")))
-                            var_depth = list(
-                                set(
-                                    tf.get_collection(
-                                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                                        scope=".*(depth_net|feature_net_disp).*"
-                                    )))
-                            var_flow = list(
-                                set(
-                                    tf.get_collection(
-                                        tf.GraphKeys.TRAINABLE_VARIABLES,
-                                        scope=".*(flow_net|feature_net_flow).*"
-                                    )))
-
-                            if opt.mode == "depthflow":
-                                var_train_list = var_pose + var_depth + var_flow
-                            elif opt.mode == "depth":
-                                var_train_list = var_pose + var_depth
-                            elif opt.mode == "flow":
-                                var_train_list = var_flow
-                            else:
-                                var_train_list = var_depth
-
-                        else:
-                            model = Model(
-                                split_image1[i],
-                                split_image2[i],
-                                split_image_r[i],
-                                split_image_r_next[i],
-                                split_cam2pix[i],
-                                split_pix2cam[i],
-                                reuse_scope=True,
-                                scope=vs)
+                            var_train_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
                         # Retain the summaries from the final tower.
                         if i == opt.num_gpus - 1:
