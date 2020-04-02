@@ -182,14 +182,14 @@ def train(Model, Model_eval, opt):
         print('*** Start training')
         lr_func = functools.partial(lr_scheduler, opt.learning_rate)
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
-            if opt.train_test == "train":
-                _, summary_str = sess.run([apply_gradient_op, summary_op])
+            _, summary_str = sess.run([apply_gradient_op, summary_op],
+                feed_dict={lr: lr_func(itr / opt.num_iterations)})
 
-                if (itr) % (SUMMARY_INTERVAL) == 2:
-                    summary_writer.add_summary(summary_str, itr)
+            if (itr) % (SUMMARY_INTERVAL) == 2:
+                summary_writer.add_summary(summary_str, itr)
 
-                if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
-                    saver.save(sess, opt.trace + '/model', global_step=global_step)
+            if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
+                saver.save(sess, opt.trace + '/model', global_step=global_step)
 
             if (itr) % (VAL_INTERVAL) == 100:
                 result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
