@@ -1,8 +1,11 @@
-function gen_cmd {
-    Param([string]$opt, [string]$env)
-    $activate_with_semicolon = if ($env) { ". activate $env;" } else { "" }
+function run_cmd {
+    Param([int]$idx, [string]$opt, [string]$env)
 
-$output = @"
+    $activate_with_semicolon = if ($env) { ". activate $env;" } else { "" }
+    $name = "VT-Learner-{0:d2}" -f $idx
+    Write-Host "Sending command to $name ..." -ForegroundColor Green		
+    
+$cmd = @"
 cd /workspace/UnDepthflow/;
 git pull;
 while tmux has-session -t vtlearn &> /dev/null;
@@ -24,21 +27,14 @@ tmux select-pane -t vtlearn:0 -U;
 tmux list-pane -t vtlearn:0;
 "@
 
-    return $output
+    plink -load $name -batch "$cmd"
 }
 
-$cmd00 = gen_cmd "--lr_loss_weight=1.0 --trace=.results_stereo_1.0" ""
-$cmd01 = gen_cmd "--lr_loss_weight=2.0 --trace=.results_stereo_2.0" ""
-$cmd02 = gen_cmd "--lr_loss_weight=3.0 --trace=.results_stereo_3.0" ""
-$cmd99 = gen_cmd "--lr_loss_weight=4.0 --trace=.results_stereo_4.0" "vt-learn"
+run_cmd 0 "--lr_loss_weight=1.0 --trace=.results_stereo_1.0" ""
+run_cmd 1 "--lr_loss_weight=1.0 --trace=.results_stereo_1.0 --num_gpus=2" ""
+run_cmd 2 "--lr_loss_weight=2.0 --trace=.results_stereo_2.0" ""
+run_cmd 3 "--lr_loss_weight=3.0 --trace=.results_stereo_3.0" ""
+run_cmd 99 "--lr_loss_weight=4.0 --trace=.results_stereo_4.0" "vt-learn"
 
-Write-Host "Sending command to VT-Learner-00 ..." -ForegroundColor Green		
-plink -load VT-Learner-00 -batch "$cmd00"
-Write-Host "Sending command to VT-Learner-01 ..." -ForegroundColor Green		
-plink -load VT-Learner-01 -batch "$cmd01"
-Write-Host "Sending command to VT-Learner-02 ..." -ForegroundColor Green		
-plink -load VT-Learner-02 -batch "$cmd02"
-Write-Host "Sending command to VT-Learner-99 ..." -ForegroundColor Green		
-plink -load VT-Learner-99 -batch "$cmd99"
 Write-Host "Done ..." -ForegroundColor Green		
 pause

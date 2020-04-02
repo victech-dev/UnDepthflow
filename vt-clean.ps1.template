@@ -23,6 +23,8 @@ if ($confirmation -eq 'yes') {
 	plink -load VT-Learner-01 -batch "$cmd"
 	Write-Host "Cleaning VT-Learner-02 ..." -ForegroundColor Green		
 	plink -load VT-Learner-02 -batch "$cmd"
+	Write-Host "Cleaning VT-Learner-03 ..." -ForegroundColor Green		
+	plink -load VT-Learner-03 -batch "$cmd"
 	Write-Host "Cleaning VT-Learner-99 ..." -ForegroundColor Green		
 	plink -load VT-Learner-99 -batch "$cmd"
 	Write-Host "Done ..." -ForegroundColor Green		
