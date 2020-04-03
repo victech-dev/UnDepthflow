@@ -437,10 +437,13 @@ def imresize(arr, size, interp='bilinear', mode=None):
     imnew = im.resize(size, resample=func[interp])
     return fromimage(imnew)
 
-def imshow(img, name='imshow', rgb=True, wait=True):
+def imshow(img, name='imshow', rgb=True, wait=True, norm=True):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
     if len(img.shape)==3 and img.shape[2]==3 and rgb:
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    if norm and (img.dtype==numpy.float32 or img.dtype==numpy.float):
+        img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
+        img = cv2.convertScaleAbs(img, alpha=255)
     cv2.imshow(name, img)
     if wait:
         cv2.waitKey(0)
