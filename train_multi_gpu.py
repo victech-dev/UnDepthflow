@@ -59,11 +59,11 @@ def train(Model, Model_eval, opt):
                         model = Model(split_image1[i], split_image2[i], 
                             split_image_r[i], split_image_r_next[i], 
                             split_cam2pix[i], split_pix2cam[i], reuse_scope=(i > 0), scope=vs)
-                        if i == 0:
-                            var_train_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
-                        # Retain the summaries from the final tower.
-                        if i == opt.num_gpus - 1:
+                        if i == 0:
+                            # variables reside in the first model
+                            var_train_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+                            # extract summaries from first model (train_model)
                             reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
                             tf.summary.scalar('reg_loss', reg_loss)
                             tf.summary.scalar('total_loss', model.loss)
