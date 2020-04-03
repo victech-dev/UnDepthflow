@@ -32,11 +32,14 @@ flags.DEFINE_float('weight_decay', 1e-4, 'scale of l2 regularization')
 flags.DEFINE_integer("img_height", 256, "Image height")
 flags.DEFINE_integer("img_width", 832, "Image width")
 
+# common for all mode
+flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
+# for stereo
 flags.DEFINE_float("disp_smooth_weight", 0.5, "Weight for disparity smoothness")
 flags.DEFINE_float("lr_loss_weight", 3.0, "Weight for LR consistency")
-
-flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
-flags.DEFINE_float("flow_smooth_weight", 10.0, "Weight for flow smoothness")
+# for flow
+flags.DEFINE_float("flow_smooth_weight", 0.5, "Weight for flow smoothness")
+# for depthflow
 flags.DEFINE_float("flow_consist_weight", 0.01, "Weight for flow consistent")
 flags.DEFINE_float("flow_diff_threshold", 4.0, "threshold when comparing optical flow and rigid flow ")
 
