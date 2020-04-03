@@ -3,22 +3,21 @@ import numpy as np
 import tensorflow.contrib.slim as slim
 import cv2
 
-
 # Some were adopted from 
 # https://github.com/tensorflow/models/tree/master/research/video_prediction
 def average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers.
 
-  Note that this function provides a synchronization point across all towers.
+    Note that this function provides a synchronization point across all towers.
 
-  Args:
-    tower_grads: List of lists of (gradient, variable) tuples. The outer list
-      is over individual gradients. The inner list is over the gradient
-      calculation for each tower.
-  Returns:
-     List of pairs of (gradient, variable) where the gradient has been averaged
-     across all towers.
-  """
+    Args:
+      tower_grads: List of lists of (gradient, variable) tuples. The outer list
+        is over individual gradients. The inner list is over the gradient
+        calculation for each tower.
+    Returns:
+      List of pairs of (gradient, variable) where the gradient has been averaged
+      across all towers.
+    """
     average_grads = []
     for grad_and_vars in zip(*tower_grads):
         # Note that each grad_and_vars looks like the following:
@@ -46,25 +45,23 @@ def average_gradients(tower_grads):
 
 def mean_squared_error(true, pred):
     """L2 distance between tensors true and pred.
-
-  Args:
-    true: the ground truth image.
-    pred: the predicted image.
-  Returns:
-    mean squared error between ground truth and predicted image.
-  """
+    Args:
+      true: the ground truth image.
+      pred: the predicted image.
+    Returns:
+      mean squared error between ground truth and predicted image.
+    """
     return tf.reduce_sum(tf.square(true - pred)) / tf.to_float(tf.size(pred))
 
 
 def weighted_mean_squared_error(true, pred, weight):
     """L2 distance between tensors true and pred.
-
-  Args:
-    true: the ground truth image.
-    pred: the predicted image.
-  Returns:
-    mean squared error between ground truth and predicted image.
-  """
+    Args:
+      true: the ground truth image.
+      pred: the predicted image.
+    Returns:
+      mean squared error between ground truth and predicted image.
+    """
 
     tmp = tf.reduce_sum(
         weight * tf.square(true - pred), axis=[1, 2],
@@ -76,94 +73,64 @@ def weighted_mean_squared_error(true, pred, weight):
 def mean_L1_error(true, pred):
     """L2 distance between tensors true and pred.
 
-  Args:
-    true: the ground truth image.
-    pred: the predicted image.
-  Returns:
-    mean squared error between ground truth and predicted image.
-  """
+    Args:
+      true: the ground truth image.
+      pred: the predicted image.
+    Returns:
+      mean squared error between ground truth and predicted image.
+    """
     return tf.reduce_sum(tf.abs(true - pred)) / tf.to_float(tf.size(pred))
 
 
 def weighted_mean_L1_error(true, pred, weight):
     """L2 distance between tensors true and pred.
 
-  Args:
-    true: the ground truth image.
-    pred: the predicted image.
-  Returns:
-    mean squared error between ground truth and predicted image.
-  """
+    Args:
+      true: the ground truth image.
+      pred: the predicted image.
+    Returns:
+      mean squared error between ground truth and predicted image.
+    """
     return tf.reduce_sum(tf.abs(true - pred) *
                          weight) / tf.to_float(tf.size(pred))
 
 
-def cal_grad2_error(flo, image, beta):
-    """
-    Calculate the image-edge-aware second-order smoothness loss for flo 
-    """
-
-    def gradient(pred):
-        D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
-        D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
-        return D_dx, D_dy
-
-    img_grad_x, img_grad_y = gradient(image)
-    weights_x = tf.exp(-10.0 * tf.reduce_mean(
-        tf.abs(img_grad_x), 3, keep_dims=True))
-    weights_y = tf.exp(-10.0 * tf.reduce_mean(
-        tf.abs(img_grad_y), 3, keep_dims=True))
-
-    dx, dy = gradient(flo)
-    dx2, dxdy = gradient(dx)
-    dydx, dy2 = gradient(dy)
-
-    return (tf.reduce_mean(beta*weights_x[:,:, 1:, :]*tf.abs(dx2)) + \
-           tf.reduce_mean(beta*weights_y[:, 1:, :, :]*tf.abs(dy2))) / 2.0
-
-
-def cal_grad2_error_mask(flo, image, beta, mask):
-    """
-    Calculate the image-edge-aware second-order smoothness loss for flo
-    within the given mask 
-    """
-
-    def gradient(pred):
-        D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
-        D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
-        return D_dx, D_dy
-
-    img_grad_x, img_grad_y = gradient(image)
-    weights_x = tf.exp(-10.0 * tf.reduce_mean(
-        tf.abs(img_grad_x), 3, keep_dims=True))
-    weights_y = tf.exp(-10.0 * tf.reduce_mean(
-        tf.abs(img_grad_y), 3, keep_dims=True))
-
-    dx, dy = gradient(flo)
-    dx2, dxdy = gradient(dx)
-    dydx, dy2 = gradient(dy)
-
-    return (tf.reduce_mean(beta*weights_x[:,:, 1:, :]*tf.abs(dx2) * mask[:, :, 1:-1, :]) + \
-           tf.reduce_mean(beta*weights_y[:, 1:, :, :]*tf.abs(dy2) * mask[:, 1:-1, :, :])) / 2.0
+def grad2_smoothness(flow, pyramid, mask=None):
+    ''' exp(-[Iy,Ix]) * [Dyy,Dxx], D is log of disp '''
+    def _grad2(s, img): # Iyy, Ixx by applying 1D Laplacian filter
+        # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
+        img_shape = tf.shape(img)
+        fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
+        kernel = tf.convert_to_tensor(np.stack([fxx.T, fxx], axis=-1))
+        kernel = tf.tile(kernel[:,:,None,:], [1, 1, img_shape[-1], 1]) # [3,3,C,2]
+        padded = tf.pad(img, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
+        grad2 = tf.nn.depthwise_conv2d(padded, kernel, [1, 1, 1, 1], padding='VALID') # [B,H,W,Cx2]
+        shape = tf.concat([img_shape, [2]], 0)
+        grad2 = tf.reshape(grad2, shape=shape)
+        scale_factor = 0.25 ** s
+        return scale_factor * grad2 # [B, H, W, C, (iyy,ixx)]
+    def _weight(s, img): # Iy, Ix by Sobel filter
+        # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
+        rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
+        sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
+        sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
+        sobel_abs = tf.abs(sobel_weighted)
+        g = tf.reduce_max(sobel_abs, axis=3, keepdims=True) # [B, H, W, 1, (iy,ix)]
+        scale_factor = np.sqrt(0.5) ** s
+        return tf.exp(-scale_factor * g)
+    grad2 = [_grad2(s, tf.math.log(f)) for s, f in enumerate(flow)]
+    weight = [_weight(s, img) for s, img in enumerate(pyramid)]
+    if mask is None:
+        output = [g * w for g, w in zip(grad2, weight)]
+    else:
+        output = [g * w * tf.expand_dims(m, -1) for g, w, m in zip(grad2, weight, mask)]
+    return output # array of [B, H, W, C, 2]
 
 
 def SSIM(x, y):
-    C1 = 0.01**2
-    C2 = 0.03**2
-
-    mu_x = slim.avg_pool2d(x, 3, 1, 'VALID')
-    mu_y = slim.avg_pool2d(y, 3, 1, 'VALID')
-
-    sigma_x = slim.avg_pool2d(x**2, 3, 1, 'VALID') - mu_x**2
-    sigma_y = slim.avg_pool2d(y**2, 3, 1, 'VALID') - mu_y**2
-    sigma_xy = slim.avg_pool2d(x * y, 3, 1, 'VALID') - mu_x * mu_y
-
-    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
-    SSIM_d = (mu_x**2 + mu_y**2 + C1) * (sigma_x + sigma_y + C2)
-
-    SSIM = SSIM_n / SSIM_d
-
-    return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
+    # note using huge filter sigma to mimic averaging
+    ssim = tf.image.ssim(x, y, 1.0, filter_size=3, filter_sigma=256)
+    return tf.clip_by_value(0.5 * (1 - ssim), 0, 1)
 
 
 def deprocess_image(image):
