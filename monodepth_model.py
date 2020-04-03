@@ -166,7 +166,7 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + opt.depth_smooth_weight * self.disp_gradient_loss + opt.lr_loss_weight * self.lr_loss
+            self.total_loss = self.image_loss + opt.disp_smooth_weight * self.disp_gradient_loss + opt.lr_loss_weight * self.lr_loss
 
     def build_summaries(self):
         # SUMMARIES
