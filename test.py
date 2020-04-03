@@ -68,6 +68,11 @@ def show_pcd(img, depth, K):
     xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
     xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
     rgb = np.reshape(img, (-1, 3)) / 255.0
+    # remove 0-depth area
+    mask = (depth > 0).flatten()
+    xyz = xyz[mask]
+    rgb = rgb[mask]
+    # compose point cloud and visualize it
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz)
     pcd.colors = o3d.utility.Vector3dVector(rgb)
