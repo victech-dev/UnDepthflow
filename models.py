@@ -9,7 +9,7 @@ from core_warp import inv_warp_flow, fwd_warp_flow
 from monodepth_dataloader import get_multi_scale_intrinsics
 from utils import inverse_warp, inverse_warp_new
 from loss_utils import SSIM, deprocess_image, preprocess_image,\
-  cal_grad2_error_mask, charbonnier_loss, cal_grad2_error
+  grad2_smoothness, charbonnier_loss
 
 def scale_pyramid(img):
     downsample = tf.keras.layers.AveragePooling2D(2)
@@ -120,12 +120,10 @@ class Model_flow(object):
         occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         pixel_loss_optical = 0
-        flow_smooth_loss = 0
         tgt_image_all = scale_pyramid(image1)
         src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
         proj_error_depth_all = []
-        flyout_map_all = []
 
         for s in range(opt.num_scales):
             # Scale the source and target images for computing loss at the 
@@ -142,22 +140,18 @@ class Model_flow(object):
             pixel_loss_optical += (1.0 - opt.ssim_weight) * tf.reduce_mean(
                 curr_proj_error_optical * occu_mask) / occu_mask_avg
 
-            curr_flyout_map = occu_mask
-
             if opt.ssim_weight > 0:
                 pixel_loss_optical += opt.ssim_weight * tf.reduce_mean(
                     SSIM(curr_proj_image_optical * occu_mask, curr_tgt_image *
                          occu_mask)) / occu_mask_avg
 
-            flow_smooth_loss += opt.flow_smooth_weight * cal_grad2_error(
-                optical_flows[s] / 20.0, curr_tgt_image, 1.0)
-
             proj_image_depth_all.append(curr_proj_image_optical)
             proj_error_depth_all.append(curr_proj_error_optical)
 
-            flyout_map_all.append(curr_flyout_map)
+        flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
+            for s in grad2_smoothness(optical_flows, tgt_image_all)])
 
-        self.loss = (pixel_loss_optical + flow_smooth_loss)
+        self.loss = (pixel_loss_optical + opt.flow_smooth_weight * flow_smooth_loss)
         self.outputs = dict(optical_flows=optical_flows, 
             optical_flows_rev=optical_flows_rev, occu_masks=occu_masks)
 
@@ -439,13 +433,12 @@ class Model_depthflow(object):
 
         pixel_loss_depth = 0
         pixel_loss_optical = 0
-        flow_smooth_loss = 0
         flow_consist_loss = 0
         tgt_image_all = scale_pyramid(image1)
         src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
         proj_error_depth_all = []
-        flyout_map_all = []
+        ref_exp_mask_all = []
 
         for s in range(opt.num_scales):
             occu_mask = occu_masks[s]
@@ -499,8 +492,6 @@ class Model_depthflow(object):
             pixel_loss_optical += (1.0 - opt.ssim_weight) * tf.reduce_mean(
                 curr_proj_error_optical * occu_mask) / occu_mask_avg
 
-            curr_flyout_map = occu_mask
-
             if opt.ssim_weight > 0:
                 pixel_loss_depth += opt.ssim_weight * tf.reduce_mean(
                     SSIM(curr_proj_image_depth * occu_mask * ref_exp_mask,
@@ -514,27 +505,25 @@ class Model_depthflow(object):
                     SSIM(curr_proj_image_optical * occu_mask, curr_tgt_image *
                          occu_mask)) / occu_mask_avg
 
-#         
-            flow_smooth_loss += opt.flow_smooth_weight * cal_grad2_error_mask(
-                optical_flows[s] / 20.0, curr_tgt_image, 1.0,
-                1.0 - ref_exp_mask)
             depth_flow_stop = tf.stop_gradient(depth_flow)
             flow_consist_loss += opt.flow_consist_weight * charbonnier_loss(
                 depth_flow_stop - optical_flows[s], ref_exp_mask)
 
             proj_image_depth_all.append(curr_proj_image_depth)
             proj_error_depth_all.append(curr_proj_error_depth)
+            ref_exp_mask_all.append(ref_exp_mask)
 
-            flyout_map_all.append(curr_flyout_map)
+        #DEBUG original code using 1-ref_exp_mask ??? what is ref_exp_mask
+        flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
+            for s in grad2_smoothness(optical_flows, tgt_image_all, ref_exp_mask_all)])
+        #DEBUG
 
-        self.loss = (
-            3.0 * pixel_loss_depth + stereo_smooth_loss
-        ) + pixel_loss_optical + flow_smooth_loss + flow_consist_loss
+        self.loss = (3.0 * pixel_loss_depth + stereo_smooth_loss) + \
+            pixel_loss_optical + opt.flow_smooth_weight * flow_smooth_loss + flow_consist_loss
 
         self.outputs = dict(stereo=disp_outputs, pred_poses=pred_poses,
             optical_flows=optical_flows, optical_flows_rev=optical_flows_rev,
-            occu_masks=occu_masks, flow_diff=flow_diff, flow_diff_mask = flow_diff_mask, 
-            occu_region=occu_region, ref_exp_mask=ref_exp_mask)
+            occu_masks=occu_masks, ref_exp_mask=ref_exp_mask_all)
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
             with tf.name_scope('stereo_losses/'):
