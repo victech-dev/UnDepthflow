@@ -21,6 +21,7 @@ import tensorflow.contrib.slim as slim
 from autoflags import opt
 from nets.pwc_disp import pwc_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
+from loss_utils import grad2_smoothness, SSIM
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -55,32 +56,6 @@ class MonodepthModel(object):
 
     def generate_flow_right(self, disp, scale):
         return self.generate_flow_left(-disp, scale)
-
-    ''' exp(-[Iy,Ix]) * [Dyy,Dxx], D is normalized depth '''
-    def get_disparity_smoothness(self, disp, pyramid):
-        LOSS_COEFFS = [1.0, 0.32506809, 0.13110368, 0.06063714]
-        WEIGHT_COEFFS = [1.0, 0.7, 0.5, 0.33]
-        def _loss(s, gray): # Dyy, Dxx by applying 1D Laplacian filter
-            # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
-            fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
-            filters = np.expand_dims(np.stack([fxx.T, fxx], axis=-1), axis=2)
-            i_pad = tf.pad(gray, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
-            iyyixx = tf.nn.conv2d(i_pad, filters, 1, padding='VALID')
-            return LOSS_COEFFS[s]*iyyixx # [B,H,W,(dyy,dxx)]
-        def _weights(s, img): # Iy, Ix by Sobel filter
-            # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
-            rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
-            sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
-            sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
-            sobel_abs = tf.abs(sobel_weighted)
-            g = tf.reduce_max(sobel_abs, axis=3) # [batch, height, width, (iy,ix)]
-            return tf.exp(-WEIGHT_COEFFS[s]*g)
-        depth = [1.0 / (d+1e-3) for d in disp]
-        depth_mean = [tf.reduce_mean(d, axis=[1,2], keepdims=True) for d in depth]
-        depth = [d / m for d, m in zip(depth, depth_mean)]    
-        loss = [_loss(s, d) for s, d in enumerate(depth)]
-        weights = [_weights(s, img) for s, img in enumerate(pyramid)]
-        return [l*w for l, w in zip(loss, weights)] # [batch, height, width, 2]
 
     def build_model(self):
         with slim.arg_scope(
@@ -137,10 +112,8 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = self.get_disparity_smoothness(
-                self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = self.get_disparity_smoothness(
-                self.disp_right_est, self.right_pyramid)
+            self.disp_left_smoothness = grad2_smoothness(self.disp_left_est, self.left_pyramid)
+            self.disp_right_smoothness = grad2_smoothness(self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
@@ -164,19 +137,10 @@ class MonodepthModel(object):
             ]
 
             # SSIM
-            self.ssim_left = [
-                tf.image.ssim(est * mask, tgt * mask, 1.0, filter_size=3, filter_sigma=256)
-                for est, tgt, mask in zip(self.left_est, self.left_pyramid, self.left_occ_mask)]
-            self.ssim_loss_left = [
-                tf.reduce_mean(tf.clip_by_value(0.5 * (1 - ssim), 0, 1)) / denom
-                for ssim, denom in zip(self.ssim_left, self.left_occ_mask_avg)]
-
-            self.ssim_right = [
-                tf.image.ssim(est * mask, tgt * mask, 1.0, filter_size=3, filter_sigma=256)
-                for est, tgt, mask in zip(self.right_est, self.right_pyramid, self.right_occ_mask)]
-            self.ssim_loss_right = [
-                tf.reduce_mean(tf.clip_by_value(0.5 * (1 - ssim), 0, 1)) / denom
-                for ssim, denom in zip(self.ssim_right, self.right_occ_mask_avg)]
+            self.ssim_loss_left = [tf.reduce_mean(SSIM(x * m, y * m)) / denom
+                for x, y, m, denom in zip(self.left_est, self.left_pyramid, self.left_occ_mask, self.left_occ_mask_avg)]
+            self.ssim_loss_right = [tf.reduce_mean(SSIM(x * m, y * m)) / denom
+                for x, y, m, denom in zip(self.right_est, self.right_pyramid, self.right_occ_mask, self.right_occ_mask_avg)]
 
             # WEIGTHED SUM
             self.image_loss_right = [
@@ -249,14 +213,6 @@ class MonodepthModel(object):
                     tf.summary.image(
                         'right_est_' + str(i),
                         self.right_est[i],
-                        max_outputs=4)
-                    tf.summary.image(
-                        'ssim_left_' + str(i),
-                        self.ssim_left[i],
-                        max_outputs=4)
-                    tf.summary.image(
-                        'ssim_right_' + str(i),
-                        self.ssim_right[i],
                         max_outputs=4)
                     tf.summary.image(
                         'l1_left_' + str(i),
