@@ -137,11 +137,13 @@ def train(Model, Model_eval, opt):
         print('*** Start training')
         lr_func = functools.partial(lr_scheduler, opt.learning_rate)
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
-            _, summary_str = sess.run([train_op, summary_op], 
-                feed_dict={lr: lr_func(itr / opt.num_iterations)})
-
+            fetches = dict(train=train_op)
             if (itr) % (SUMMARY_INTERVAL) == 2:
-                summary_writer.add_summary(summary_str, itr)
+                fetches['summary'] = summary_op
+            outputs = sess.run(fetches,  feed_dict={lr: lr_func(itr / opt.num_iterations)})
+
+            if 'summary' in outputs:
+                summary_writer.add_summary(outputs['summary'], itr)
 
             if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                 saver.save(sess, opt.trace + '/model', global_step=global_step)
