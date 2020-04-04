@@ -129,7 +129,7 @@ def disp_smoothness(disp, pyramid):
 
 
 def flow_smoothness(flow, pyramid, mask=None):
-    grad2 = [calc_grad2(flow, level=s) for s, d in enumerate(flow)]
+    grad2 = [calc_grad2(f, level=s) for s, f in enumerate(flow)]
     weight = [edge_aware_weight(img, level=s) for s, img in enumerate(pyramid)]
     output = [g * w for g, w in zip(grad2, weight)]
     if mask:
