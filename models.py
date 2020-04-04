@@ -119,6 +119,7 @@ class Model_flow(object):
         occu_masks = [tf.clip_by_value(fwd_warp_flow(1, f), 0, 1) for f in optical_flows_rev]
 
         pixel_loss_optical = 0
+        flow_smooth_loss = 0
         tgt_image_all = scale_pyramid(image1)
         src_image_all = scale_pyramid(image2)
         proj_image_depth_all = []
@@ -144,11 +145,11 @@ class Model_flow(object):
                     SSIM(curr_proj_image_optical * occu_mask, curr_tgt_image *
                          occu_mask)) / occu_mask_avg
 
+            flow_smooth_loss += tf.reduce_mean(
+                flow_smoothness(optical_flows[s], curr_tgt_image, level=s))
+
             proj_image_depth_all.append(curr_proj_image_optical)
             proj_error_depth_all.append(curr_proj_error_optical)
-
-        flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
-            for s in flow_smoothness(optical_flows, tgt_image_all)])
 
         self.loss = (pixel_loss_optical + opt.flow_smooth_weight * flow_smooth_loss)
         self.outputs = dict(optical_flows=optical_flows, 
@@ -432,6 +433,7 @@ class Model_depthflow(object):
 
         pixel_loss_depth = 0
         pixel_loss_optical = 0
+        flow_smooth_loss = 0
         flow_consist_loss = 0
         tgt_image_all = scale_pyramid(image1)
         src_image_all = scale_pyramid(image2)
@@ -466,9 +468,12 @@ class Model_depthflow(object):
                     tf.square(depth_flow - optical_flows[s]),
                     axis=3,
                     keep_dims=True))
+            # flow_diff_mask: static region ON
             flow_diff_mask = tf.cast(
                 flow_diff < (opt.flow_diff_threshold / 2**s), tf.float32)
+            # occu_region: occlusion ON
             occu_region = tf.cast(occu_mask < 0.5, tf.float32)
+            # ref_exp_mask: static or occlusion ON (1-M of the paper)
             ref_exp_mask = tf.clip_by_value(
                 flow_diff_mask + occu_region,
                 clip_value_min=0.0,
@@ -507,6 +512,8 @@ class Model_depthflow(object):
                     SSIM(curr_proj_image_optical * occu_mask, curr_tgt_image *
                          occu_mask)) / occu_mask_avg
 
+            flow_smooth_loss += tf.reduce_mean(
+                flow_smoothness(optical_flows[s], curr_tgt_image, level=s) * (1.0 - ref_exp_mask))
             depth_flow_stop = tf.stop_gradient(depth_flow)
             flow_consist_loss += opt.flow_consist_weight * charbonnier_loss(
                 depth_flow_stop - optical_flows[s], ref_exp_mask)
@@ -517,12 +524,6 @@ class Model_depthflow(object):
 
             flow_diff_mask_all.append(flow_diff_mask)
             occu_region_all.append(occu_region)
-
-
-        #DEBUG original code using 1-ref_exp_mask ??? what is ref_exp_mask
-        flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
-            for s in flow_smoothness(optical_flows, tgt_image_all, ref_exp_mask_all)])
-        #DEBUG
 
         self.loss = (3.0 * pixel_loss_depth + stereo_smooth_loss) + \
             pixel_loss_optical + opt.flow_smooth_weight * flow_smooth_loss + flow_consist_loss

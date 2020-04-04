@@ -128,13 +128,10 @@ def disp_smoothness(disp, pyramid):
     return output # array of [B, H, W, 1, 2]
 
 
-def flow_smoothness(flow, pyramid, mask=None):
-    grad2 = [calc_grad2(f, level=s) for s, f in enumerate(flow)]
-    weight = [edge_aware_weight(img, level=s) for s, img in enumerate(pyramid)]
-    output = [g * w for g, w in zip(grad2, weight)]
-    if mask:
-        output = [o * tf.expand_dims(m, -1) for o, m in zip(output, mask)]
-    return output # array of [B, H, W, 2, 2]
+def flow_smoothness(flow, image, level=0):
+    g = calc_grad2(flow, level=level)
+    w = edge_aware_weight(image, level=level)
+    return tf.reduce_sum(tf.abs(g * w), axis=-1) # [B, H, W, 2]
 
 
 def SSIM(x, y):
