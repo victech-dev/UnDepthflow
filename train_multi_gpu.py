@@ -140,7 +140,7 @@ def train(Model, Model_eval, opt):
             fetches = dict(train=train_op)
             if (itr) % (SUMMARY_INTERVAL) == 2:
                 fetches['summary'] = summary_op
-            outputs = sess.run(fetches,  feed_dict={lr: lr_func(itr / opt.num_iterations)})
+            outputs = sess.run(apply_gradient_op, feed_dict={lr: lr_func(itr / opt.num_iterations)})
 
             if 'summary' in outputs:
                 summary_writer.add_summary(outputs['summary'], itr)
