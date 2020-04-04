@@ -137,10 +137,10 @@ def train(Model, Model_eval, opt):
         print('*** Start training')
         lr_func = functools.partial(lr_scheduler, opt.learning_rate)
         for itr in trange(start_itr, opt.num_iterations, file=sys.stdout):
-            fetches = dict(train=train_op)
+            fetches = dict(train=apply_gradient_op)
             if (itr) % (SUMMARY_INTERVAL) == 2:
                 fetches['summary'] = summary_op
-            outputs = sess.run(apply_gradient_op, feed_dict={lr: lr_func(itr / opt.num_iterations)})
+            outputs = sess.run(fetches, feed_dict={lr: lr_func(itr / opt.num_iterations)})
 
             if 'summary' in outputs:
                 summary_writer.add_summary(outputs['summary'], itr)
