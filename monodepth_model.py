@@ -21,7 +21,7 @@ import tensorflow.contrib.slim as slim
 from autoflags import opt
 from nets.pwc_disp import pwc_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
-from loss_utils import grad2_smoothness, SSIM
+from loss_utils import disp_smoothness, SSIM
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -112,8 +112,8 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = grad2_smoothness(self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = grad2_smoothness(self.disp_right_est, self.right_pyramid)
+            self.disp_left_smoothness = disp_smoothness(self.disp_left_est, self.left_pyramid)
+            self.disp_right_smoothness = disp_smoothness(self.disp_right_est, self.right_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):

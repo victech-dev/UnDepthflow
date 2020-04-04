@@ -8,8 +8,7 @@ from nets.pwc_disp import feature_pyramid_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
 from monodepth_dataloader import get_multi_scale_intrinsics
 from utils import inverse_warp, inverse_warp_new
-from loss_utils import SSIM, deprocess_image, preprocess_image,\
-  grad2_smoothness, charbonnier_loss
+from loss_utils import SSIM, deprocess_image, preprocess_image, flow_smoothness, charbonnier_loss
 
 def scale_pyramid(img):
     downsample = tf.keras.layers.AveragePooling2D(2)
@@ -149,7 +148,7 @@ class Model_flow(object):
             proj_error_depth_all.append(curr_proj_error_optical)
 
         flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
-            for s in grad2_smoothness(optical_flows, tgt_image_all)])
+            for s in flow_smoothness(optical_flows, tgt_image_all)])
 
         self.loss = (pixel_loss_optical + opt.flow_smooth_weight * flow_smooth_loss)
         self.outputs = dict(optical_flows=optical_flows, 
@@ -440,6 +439,9 @@ class Model_depthflow(object):
         proj_error_depth_all = []
         ref_exp_mask_all = []
 
+        flow_diff_mask_all = []
+        occu_region_all = []
+
         for s in range(opt.num_scales):
             occu_mask = occu_masks[s]
             # Scale the source and target images for computing loss at the 
@@ -513,9 +515,13 @@ class Model_depthflow(object):
             proj_error_depth_all.append(curr_proj_error_depth)
             ref_exp_mask_all.append(ref_exp_mask)
 
+            flow_diff_mask_all.append(flow_diff_mask)
+            occu_region_all.append(occu_region)
+
+
         #DEBUG original code using 1-ref_exp_mask ??? what is ref_exp_mask
         flow_smooth_loss = tf.add_n([tf.reduce_mean(tf.abs(s)) 
-            for s in grad2_smoothness(optical_flows, tgt_image_all, ref_exp_mask_all)])
+            for s in flow_smoothness(optical_flows, tgt_image_all, ref_exp_mask_all)])
         #DEBUG
 
         self.loss = (3.0 * pixel_loss_depth + stereo_smooth_loss) + \
@@ -523,7 +529,8 @@ class Model_depthflow(object):
 
         self.outputs = dict(stereo=disp_outputs, pred_poses=pred_poses,
             optical_flows=optical_flows, optical_flows_rev=optical_flows_rev,
-            occu_masks=occu_masks, ref_exp_mask=ref_exp_mask_all)
+            occu_masks=occu_masks, ref_exp_masks=ref_exp_mask_all,
+            flow_diff_masks=flow_diff_mask_all, occu_regions=occu_region_all)
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
             with tf.name_scope('stereo_losses/'):

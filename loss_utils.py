@@ -94,37 +94,47 @@ def weighted_mean_L1_error(true, pred, weight):
     return tf.reduce_sum(tf.abs(true - pred) *
                          weight) / tf.to_float(tf.size(pred))
 
+def calc_grad2(img, level=0):
+    ''' Calculate Iyy, Ixx by applying 1D Laplacian filter for each axis '''
+    # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
+    img_shape = tf.shape(img)
+    fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
+    kernel = tf.convert_to_tensor(np.stack([fxx.T, fxx], axis=-1))
+    kernel = tf.tile(kernel[:,:,None,:], [1, 1, img_shape[-1], 1]) # [3,3,C,2]
+    padded = tf.pad(img, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
+    grad2 = tf.nn.depthwise_conv2d(padded, kernel, [1, 1, 1, 1], padding='VALID') # [B,H,W,Cx2]
+    shape = tf.concat([img_shape, [2]], 0)
+    grad2 = tf.reshape(grad2, shape=shape)
+    level_factor = 0.25 ** level
+    return level_factor * grad2 # [B, H, W, C, (iyy,ixx)]
 
-def grad2_smoothness(flow, pyramid, mask=None):
-    ''' exp(-[Iy,Ix]) * [Dyy,Dxx], D is log of disp '''
-    def _grad2(s, img): # Iyy, Ixx by applying 1D Laplacian filter
-        # x3 scale compared to vanila gradient of gradient caused by 3x3 Laplacian filter
-        img_shape = tf.shape(img)
-        fxx = np.array([[1,-2,1]]*3, dtype=np.float32)
-        kernel = tf.convert_to_tensor(np.stack([fxx.T, fxx], axis=-1))
-        kernel = tf.tile(kernel[:,:,None,:], [1, 1, img_shape[-1], 1]) # [3,3,C,2]
-        padded = tf.pad(img, [[0,0],[1,1],[1,1],[0,0]], 'SYMMETRIC')
-        grad2 = tf.nn.depthwise_conv2d(padded, kernel, [1, 1, 1, 1], padding='VALID') # [B,H,W,Cx2]
-        shape = tf.concat([img_shape, [2]], 0)
-        grad2 = tf.reshape(grad2, shape=shape)
-        scale_factor = 0.25 ** s
-        return scale_factor * grad2 # [B, H, W, C, (iyy,ixx)]
-    def _weight(s, img): # Iy, Ix by Sobel filter
-        # x10 scale compared to vanila gradient caused by rgb weight and sobel filter
-        rgb_weight = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
-        sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
-        sobel_weighted = sobel * rgb_weight[None,None,None,:,None]
-        sobel_abs = tf.abs(sobel_weighted)
-        g = tf.reduce_max(sobel_abs, axis=3, keepdims=True) # [B, H, W, 1, (iy,ix)]
-        scale_factor = np.sqrt(0.5) ** s
-        return tf.exp(-scale_factor * g)
-    grad2 = [_grad2(s, tf.math.log(f)) for s, f in enumerate(flow)]
-    weight = [_weight(s, img) for s, img in enumerate(pyramid)]
-    if mask is None:
-        output = [g * w for g, w in zip(grad2, weight)]
-    else:
-        output = [g * w * tf.expand_dims(m, -1) for g, w, m in zip(grad2, weight, mask)]
-    return output # array of [B, H, W, C, 2]
+
+def edge_aware_weight(img, level=0):
+    ''' Calculate edge aware weight from Iy, Ix by Sobel filter '''
+    # x10 scale compared to vanila gradient caused by sobel filter and RGB factor
+    rgb_factor = tf.constant([0.897, 1.761, 0.342], dtype=tf.float32)
+    sobel = tf.image.sobel_edges(img) # [batch, height, width, 3, 2]
+    sobel_weighted = sobel * rgb_factor[None,None,None,:,None]
+    sobel_abs = tf.abs(sobel_weighted)
+    g = tf.reduce_max(sobel_abs, axis=3, keepdims=True) 
+    level_factor = np.sqrt(0.5) ** level
+    return tf.exp(-level_factor * g) # [B, H, W, 1, (iy,ix)]
+
+
+def disp_smoothness(disp, pyramid):
+    grad2 = [calc_grad2(tf.math.log(d), level=s) for s, d in enumerate(disp)]
+    weight = [edge_aware_weight(img, level=s) for s, img in enumerate(pyramid)]
+    output = [g * w for g, w in zip(grad2, weight)]
+    return output # array of [B, H, W, 1, 2]
+
+
+def flow_smoothness(flow, pyramid, mask=None):
+    grad2 = [calc_grad2(flow, level=s) for s, d in enumerate(flow)]
+    weight = [edge_aware_weight(img, level=s) for s, img in enumerate(pyramid)]
+    output = [g * w for g, w in zip(grad2, weight)]
+    if mask:
+        output = [o * tf.expand_dims(m, -1) for o, m in zip(output, mask)]
+    return output # array of [B, H, W, 2, 2]
 
 
 def SSIM(x, y):
