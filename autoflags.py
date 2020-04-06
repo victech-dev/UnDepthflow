@@ -36,7 +36,7 @@ flags.DEFINE_integer("img_width", 832, "Image width")
 flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
 # for stereo
 flags.DEFINE_float("disp_smooth_weight", 1.0, "Weight for disparity smoothness")
-flags.DEFINE_float("lr_loss_weight", 3.0, "Weight for LR consistency")
+flags.DEFINE_float("lr_loss_weight", 2.0, "Weight for LR consistency")
 # for flow
 flags.DEFINE_float("flow_smooth_weight", 0.1, "Weight for flow smoothness")
 # for depthflow
