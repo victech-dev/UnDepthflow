@@ -40,7 +40,7 @@ class Model_stereo(object):
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
             with tf.name_scope('stereo_losses/'):
                 tf.summary.scalar('image_loss', disp_outputs['image_loss'])
-                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('disp_smooth_loss', disp_outputs['disp_smooth_loss'])
                 tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
 
         # VICTECH disable this for training performance
@@ -295,7 +295,7 @@ class Model_depth(object):
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
             with tf.name_scope('stereo_losses/'):
                 tf.summary.scalar('image_loss', disp_outputs['image_loss'])
-                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('disp_smooth_loss', disp_outputs['disp_smooth_loss'])
                 tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):
@@ -536,7 +536,7 @@ class Model_depthflow(object):
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereo_losses/.*'):
             with tf.name_scope('stereo_losses/'):
                 tf.summary.scalar('image_loss', disp_outputs['image_loss'])
-                tf.summary.scalar('disp_gradient_loss', disp_outputs['disp_gradient_loss'])
+                tf.summary.scalar('disp_smooth_loss', disp_outputs['disp_smooth_loss'])
                 tf.summary.scalar('lr_loss', disp_outputs['lr_loss'])
 
         if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'depth_losses/.*'):

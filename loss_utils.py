@@ -121,17 +121,16 @@ def edge_aware_weight(img, level=0):
     return tf.exp(-level_factor * g) # [B, H, W, 1, (iy,ix)]
 
 
-def disp_smoothness(disp, pyramid):
-    grad2 = [calc_grad2(tf.math.log(d), level=s) for s, d in enumerate(disp)]
-    weight = [edge_aware_weight(img, level=s) for s, img in enumerate(pyramid)]
-    output = [g * w for g, w in zip(grad2, weight)]
-    return output # array of [B, H, W, 1, 2]
+def disp_smoothness(disp, image, level=0):
+    g = calc_grad2(tf.math.log(disp), level=level)
+    w = edge_aware_weight(image, level=level)
+    return tf.reduce_sum(tf.abs(g * w), axis=-1) # [B, H, W, 1]
 
 
 def flow_smoothness(flow, image, level=0):
     g = calc_grad2(flow, level=level)
     w = edge_aware_weight(image, level=level)
-    return tf.reduce_sum(tf.abs(g * w), axis=-1) # [B, H, W, 2]
+    return tf.expand_dims(tf.reduce_sum(tf.abs(g * w), axis=[3, 4]), -1) # [B, H, W, 1]
 
 
 def SSIM(x, y):

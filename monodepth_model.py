@@ -112,8 +112,10 @@ class MonodepthModel(object):
 
         # DISPARITY SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disp_left_smoothness = disp_smoothness(self.disp_left_est, self.left_pyramid)
-            self.disp_right_smoothness = disp_smoothness(self.disp_right_est, self.right_pyramid)
+            self.disp_left_smoothness = [disp_smoothness(disp, img, s) 
+                for s, (disp, img) in enumerate(zip(self.disp_left_est, self.left_pyramid))]
+            self.disp_right_smoothness = [disp_smoothness(disp, img, s) 
+                for s, (disp, img) in enumerate(zip(self.disp_right_est, self.right_pyramid))]
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
@@ -154,9 +156,9 @@ class MonodepthModel(object):
             self.image_loss = tf.add_n(self.image_loss_left + self.image_loss_right)
 
             # DISPARITY SMOOTHNESS
-            self.disp_left_loss = [tf.reduce_mean(tf.abs(s)) for s in self.disp_left_smoothness]
-            self.disp_right_loss = [tf.reduce_mean(tf.abs(s)) for s in self.disp_right_smoothness]
-            self.disp_gradient_loss = tf.add_n(self.disp_left_loss + self.disp_right_loss)
+            self.disp_smooth_left_loss = [tf.reduce_mean(s) for s in self.disp_left_smoothness]
+            self.disp_smooth_right_loss = [tf.reduce_mean(s) for s in self.disp_right_smoothness]
+            self.disp_smooth_loss = tf.add_n(self.disp_smooth_left_loss + self.disp_smooth_right_loss)
 
             # LR CONSISTENCY
             self.lr_left_loss  = [tf.reduce_mean(tf.abs(self.right_to_left_disp[i] - self.disp_left_est[i])*self.left_occ_mask[i]) / \
@@ -166,7 +168,7 @@ class MonodepthModel(object):
             self.lr_loss = tf.add_n(self.lr_left_loss + self.lr_right_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + opt.disp_smooth_weight * self.disp_gradient_loss + opt.lr_loss_weight * self.lr_loss
+            self.total_loss = self.image_loss + opt.disp_smooth_weight * self.disp_smooth_loss + opt.lr_loss_weight * self.lr_loss
 
     def build_summaries(self):
         # SUMMARIES
@@ -183,8 +185,8 @@ class MonodepthModel(object):
                     'image_loss_' + str(i),
                     self.image_loss_left[i] + self.image_loss_right[i])
                 tf.summary.scalar(
-                    'disp_gradient_loss_' + str(i),
-                    self.disp_left_loss[i] + self.disp_right_loss[i])
+                    'disp_smooth_loss_' + str(i),
+                    self.disp_smooth_left_loss[i] + self.disp_smooth_right_loss[i])
                 tf.summary.scalar(
                     'lr_loss_' + str(i),
                     self.lr_left_loss[i] + self.lr_right_loss[i])
@@ -240,7 +242,7 @@ def disp_godard(left_img, right_img, left_feature, right_feature, is_training=Tr
     if is_training:
         outputs['total_loss'] = model.total_loss
         outputs['image_loss'] = model.image_loss
-        outputs['disp_gradient_loss'] = model.disp_gradient_loss
+        outputs['disp_smooth_loss'] = model.disp_smooth_loss
         outputs['lr_loss'] = model.lr_loss
         outputs['left_occ_mask'] = model.left_occ_mask
         outputs['right_occ_mask'] = model.right_occ_mask
