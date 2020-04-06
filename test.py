@@ -5,12 +5,15 @@ import numpy as np
 import imgtool
 import cv2
 import open3d as o3d
+from pathlib import Path
 
 from autoflags import opt, autoflags
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
 from eval.test_model import TestModel
+from eval.pcd_utils import NavScene
+
 
 def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
@@ -21,74 +24,15 @@ def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
     depth = model.predict_depth(sess, imgL, imgL, imgR, imgR, K, fxb)
     return imgL, depth, K
 
-def create_axis_bar():
-    LEN, DIV, RADIUS = 20, 1, 0.02
-    color = np.eye(3)
-    rot = [o3d.geometry.get_rotation_matrix_from_xyz([0,0.5*np.pi,0]), 
-        o3d.geometry.get_rotation_matrix_from_xyz([-0.5*np.pi,0,0]), 
-        np.eye(3)]
-    bar = []
-    for c,r in zip(color, rot):
-        color_blend = False
-        for pos in np.arange(0, LEN, DIV):
-            b = o3d.geometry.TriangleMesh.create_cylinder(radius=RADIUS, height=DIV)
-            b.paint_uniform_color(c*0.5 + 0.5 if color_blend else c); color_blend = not color_blend
-            b.translate([0,0,pos + DIV/2])
-            b.rotate(r, center=False)
-            bar.append(b)
-    return bar
-
-def count_weights():
-    var_pose = list(set(tf.get_collection(
-        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*pose_net.*")))
-    var_depth = list(set(tf.get_collection(
-        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(depth_net|feature_net_disp).*")))
-    var_flow = list(set(tf.get_collection(
-        tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(flow_net|feature_net_flow).*")))
-    if opt.mode == "depthflow":
-        var_train_list = var_pose + var_depth + var_flow
-    elif opt.mode == "depth":
-        var_train_list = var_pose + var_depth
-    elif opt.mode == "flow":
-        var_train_list = var_flow
-    else:
-        var_train_list = var_depth
-    sizes = [np.prod(v.shape.as_list()) for v in var_train_list]
-    print("*** Total weight count:", np.sum(sizes))
-
-def show_pcd(img, depth, K):
-    H, W = img.shape[:2]
-    if hasattr(show_pcd, 'axisbar'):
-        axisbar = getattr(show_pcd, 'axisbar')
-    else:
-        axisbar = create_axis_bar()
-        setattr(show_pcd, 'axisbar', axisbar)
-    py, px = np.mgrid[:H,:W]
-    depth = np.clip(depth, 0, 100) # some clipping required here
-    xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
-    xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
-    rgb = np.reshape(img, (-1, 3)) / 255.0
-    # remove 0-depth area
-    mask = (depth > 0).flatten()
-    xyz = xyz[mask]
-    rgb = rgb[mask]
-    # compose point cloud and visualize it
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(xyz)
-    pcd.colors = o3d.utility.Vector3dVector(rgb)
-    # np.savetxt('./scene.txt', np.hstack([xyz.astype(np.float32), rgb.astype(np.float32)]))
-    # pcd = o3d.io.read_point_cloud("./scene.txt", format='xyzrgb')
-    o3d.visualization.draw_geometries([pcd] + axisbar)
-
 
 def main(unused_argv):
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
     opt.mode = 'stereo'
-    opt.pretrained_model = '.results_original/model-stereo'
+    opt.pretrained_model = '.results_best/model-stereo'
     Model, _ = autoflags()
 
-    with tf.Graph().as_default(), tf.device('/cpu:0'):
+    with tf.Graph().as_default(), tf.device('/gpu:0'):
         print('Constructing models and inputs.')
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("test_model"):
@@ -108,18 +52,30 @@ def main(unused_argv):
         sess.run(tf.local_variables_initializer())
         saver.restore(sess, opt.pretrained_model)
 
-        # # point cloud test of KITTI 2015 gt
-        for i in range(200):
-            img, depth, K = model.predict_depth_gt_2015(sess, i)
-            show_pcd(img, depth, K)
+        # point cloud test of KITTI 2015 gt
+        def ns_feeder(index):
+            i = index % 200
+            img1 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_10.png"))
+            img2 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_11.png"))
+            img1r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
+            img2r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
+            K = get_scaled_intrinsic_matrix(os.path.join(opt.gt_2015_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
+            fxb = width_to_focal[img1.shape[1]] * 0.54
+            depth = model.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
+            return img1, np.clip(depth, 0, 100), K
 
-        # # point cloud test of office image
-        # data_dir = 'M:\\Users\\sehee\\StereoCalibrationExample_200313_1658'
-        # imgnameL = os.path.join(data_dir, 'photo04_L.jpg')
-        # imgnameR = os.path.join(data_dir, 'photo04_R.jpg')
-        # img, depth, K = predict_depth_vicimg(sess, model, imgnameL, imgnameR)
-        # depth = np.clip(depth, 0, 20)
-        # show_pcd(img, depth, K)
+        # point cloud test of office image
+        # data_dir = Path('M:\\Users\\sehee\\StereoCapture_200316_1400\\seq1')
+        # imgnamesL = list(Path(data_dir).glob('*_L.jpg'))
+        # def ns_feeder(index):
+        #     imgnameL = imgnamesL[index % len(imgnamesL)]
+        #     imgnameR = (data_dir/imgnameL.stem.replace('_L', '_R')).with_suffix('.jpg')
+        #     img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+        #     return img, np.clip(depth, 0, 30), K
+
+        scene = NavScene(ns_feeder)
+        scene.run()
+        scene.clear()
 
 
 if __name__ == '__main__':

@@ -56,7 +56,7 @@ class TestModel(object):
                 self.image1r: img1r, self.image2r: img2r, self.intrinsic: K})
         return outputs
 
-    def predict_depth(self, sess, image1, image2, image1r, image2r, K, fxb, pp=True):
+    def predict_depth(self, sess, image1, image2, image1r, image2r, K, fxb, pp=False):
         height, width = image1.shape[:2] # original height, width
         # session run
         query = self.outputs['stereo']['disp'][0] # [1, H, W, (ltr,rtl)]
@@ -70,17 +70,3 @@ class TestModel(object):
             depth_ds = cv2.resize(pred_depth, (opt.img_width//4, opt.img_height//4), interpolation=cv2.INTER_AREA)
             pred_depth = edge_aware_upscale(depth_ds, height, width)
         return pred_depth
-
-    def predict_depth_gt_2015(self, sess, i):
-        gt_dir = opt.gt_2015_dir
-        img1 = imgtool.imread(os.path.join(gt_dir, "image_2", f"{i:06}_10.png"))
-        img2 = imgtool.imread(os.path.join(gt_dir, "image_2", f"{i:06}_11.png"))
-        img1r = imgtool.imread(os.path.join(gt_dir, "image_3", f"{i:06}_10.png"))
-        img2r = imgtool.imread(os.path.join(gt_dir, "image_3", f"{i:06}_10.png"))
-        K = get_scaled_intrinsic_matrix(os.path.join(gt_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
-        fxb = width_to_focal[img1.shape[1]] * 0.54
-        depth = self.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
-        return img1, depth, K
-
-        
-
