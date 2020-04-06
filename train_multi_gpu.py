@@ -9,6 +9,7 @@ from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
 from eval_kitti import evaluate_kitti
+from models import collect_variables, restore_from_pretrained
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -32,7 +33,7 @@ def lr_scheduler(lr, prog):
 def train(Model, Model_eval, opt):
     with tf.Graph().as_default():
         print('*** Constructing models and inputs.')
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name='global_step')
         lr = tf.placeholder(tf.float32, name='learning_rate')
         train_op = tf.train.AdamOptimizer(lr)
         image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
@@ -60,18 +61,22 @@ def train(Model, Model_eval, opt):
                             split_image_r[i], split_image_r_next[i], 
                             split_cam2pix[i], split_pix2cam[i], reuse_scope=(i > 0), scope=vs)
 
-                        # variables reside in first model, and prepare for summaries
+                        # Note variables and summaries reside in first GPU
                         if i == 0:
-                            var_train_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+                            var_train_list, var_dict = collect_variables(vs)
                             reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
                             tf.summary.scalar('reg_loss', reg_loss)
                             tf.summary.scalar('total_loss', model.loss)
-                            eval_model = Model_eval(scope=vs)
 
                         # Calculate the gradients for the batch of data on this CIFAR tower.
                         grads = train_op.compute_gradients(model.loss, var_list=var_train_list)
                         # Keep track of the gradients across all towers.
                         tower_grads.append(grads)
+
+                    # Create Evaluation model
+                    if i == 0:
+                        with tf.name_scope("eval_model"):
+                            eval_model = Model_eval(scope=vs)
 
                     print(' - Model created:', scopename)
 
@@ -99,29 +104,7 @@ def train(Model, Model_eval, opt):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         if opt.pretrained_model:
-            if opt.mode == "depthflow":
-                saver_rest = tf.train.Saver(
-                    list(
-                        set(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) -
-                        set(
-                            tf.get_collection(
-                                tf.GraphKeys.GLOBAL_VARIABLES,
-                                scope=".*(Adam_1|Adam).*"))),
-                    max_to_keep=1)
-                saver_rest.restore(sess, opt.pretrained_model)
-            elif opt.mode == "depth":
-                saver_flow = tf.train.Saver(
-                    tf.get_collection(
-                        tf.GraphKeys.MODEL_VARIABLES,
-                        scope=".*(flow_net|feature_net_flow).*"),
-                    max_to_keep=1)
-                saver_flow.restore(sess, opt.pretrained_model)
-            else:
-                raise Exception(
-                    "pretrained_model not used. Please set train_test=test or retrain=False"
-                )
-            if opt.retrain:
-                sess.run(global_step.assign(0))
+            restore_from_pretrained(sess, var_dict)
 
         start_itr = global_step.eval(session=sess)
 
