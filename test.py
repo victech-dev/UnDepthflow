@@ -6,6 +6,7 @@ import imgtool
 import cv2
 import open3d as o3d
 from pathlib import Path
+import re
 
 from autoflags import opt, autoflags
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
@@ -52,7 +53,7 @@ def main(unused_argv):
         sess.run(tf.local_variables_initializer())
         saver.restore(sess, opt.pretrained_model)
 
-        # point cloud test of KITTI 2015 gt
+        ''' point cloud test of KITTI 2015 gt '''
         def ns_feeder(index):
             i = index % 200
             img1 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_10.png"))
@@ -64,13 +65,37 @@ def main(unused_argv):
             depth = model.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
             return img1, np.clip(depth, 0, 100), K
 
-        # point cloud test of office image
+        ''' point cloud test of KITTI raw data '''
+        # data_dir = Path('M:\\datasets\\kitti_data\\kitti_raw_data\\2011_09_26\\2011_09_26_drive_0117_sync')
+        # imgnamesL = sorted(Path(data_dir/'image_02'/'data').glob('*.png'), key=lambda v: int(v.stem))
+        # imgnamesR = sorted(Path(data_dir/'image_03'/'data').glob('*.png'), key=lambda v: int(v.stem))
+        # def ns_feeder(index):
+        #     img1 = imgtool.imread(imgnamesL[index % len(imgnamesL)])
+        #     img1r = imgtool.imread(imgnamesR[index % len(imgnamesR)])
+        #     K = get_scaled_intrinsic_matrix(data_dir.parent/'calib_cam_to_cam.txt', 1.0, 1.0)
+        #     depth = model.predict_depth(sess, img1, img1, img1r, img1r, K, 720 * 0.54)
+        #     return img1, np.clip(depth, 0, 100), K
+
+        ''' point cloud test of office image '''
         # data_dir = Path('M:\\Users\\sehee\\StereoCapture_200316_1400\\seq1')
         # imgnamesL = list(Path(data_dir).glob('*_L.jpg'))
         # def ns_feeder(index):
         #     imgnameL = imgnamesL[index % len(imgnamesL)]
         #     imgnameR = (data_dir/imgnameL.stem.replace('_L', '_R')).with_suffix('.jpg')
         #     img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+        #     return img, np.clip(depth, 0, 30), K
+
+        ''' point cloud test of RealSense camera '''
+        # data_dir = Path('M:\\datasets\\realsense\\rs_1584686898\\img')
+        # idx_regex = re.compile('.*-([0-9]+)$')
+        # images = sorted(Path(data_dir).glob('rs-output-Color-*.png'), key=lambda v: int(idx_regex.search(v.stem).group(1)))
+        # def ns_feeder(index):
+        #     imgname = images[index % len(images)]
+        #     depthname = (data_dir/imgname.stem.replace('Color', 'Depth')).with_suffix('.png')
+        #     img = imgtool.imread(imgname)
+        #     depth = imgtool.imread(depthname) * 0.001
+        #     #img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+        #     K = np.array([[100, 0, 320], [0, 100, 240], [0, 0, 1]])
         #     return img, np.clip(depth, 0, 30), K
 
         scene = NavScene(ns_feeder)
