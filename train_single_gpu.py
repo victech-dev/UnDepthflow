@@ -25,7 +25,7 @@ def lr_scheduler(lr, prog):
     if isinstance(lr, (float, int)):
         return float(lr)
     elif isinstance(lr, (list, tuple)):
-        lr_max, lr_min = lr
+        lr_max, lr_min = map(float, lr)
         return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(prog * np.pi))
     else:
         raise ValueError('Invalid learning rate')
