@@ -18,7 +18,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-from autoflags import opt
+from opt_utils import opt
 from nets.pwc_disp import pwc_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
 from loss_utils import disp_smoothness, SSIM

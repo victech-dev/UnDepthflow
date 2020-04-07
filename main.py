@@ -13,7 +13,7 @@
 # ==============================================================================
 
 from tensorflow.python.platform import app
-from autoflags import opt, autoflags
+from opt_utils import opt, autoflags
 
 def main(unused_argv):
     Model, Model_eval = autoflags()

@@ -14,7 +14,7 @@ from eval.evaluate_mask import load_gt_mask
 import re, os
 import sys
 
-from autoflags import opt, autoflags
+from opt_utils import opt, autoflags
 
 def _parse_to_dict(result):
     # parse string 'name1,name2,...\nvalue1,value2,...' to dict of {name1:value1, name2:value2, ...}

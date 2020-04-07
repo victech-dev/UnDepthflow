@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import os
 
-from autoflags import opt
+from opt_utils import opt
 import imgtool
 from eval.evaluate_flow import get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluation_utils import width_to_focal

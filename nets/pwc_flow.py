@@ -16,7 +16,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import functools
 
-from autoflags import opt
+from opt_utils import opt
 from core_warp import inv_warp_flow
 
 

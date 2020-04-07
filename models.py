@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from autoflags import opt
+from opt_utils import opt
 from nets.pose_net import pose_exp_net
 from monodepth_model import disp_godard
 from nets.pwc_flow import construct_model_pwc_full, feature_pyramid_flow
@@ -653,33 +653,3 @@ class Model_eval_depthflow(object):
                           inv_warp_flow(pred_disp_rev[0][:,:,:,0:1], optical_flows[0])*(1.0-0.0)
         self.pred_mask = 1.0 - ref_exp_mask
 
-def collect_variables(scope):
-    with tf.variable_scope(scope):
-        var_pose = list(set(tf.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*pose_net.*")))
-        var_depth = list(set(tf.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(depth_net|feature_net_disp).*")))
-        var_flow = list(set(tf.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(flow_net|feature_net_flow).*")))
-
-        if opt.mode == "depthflow":
-            var_train_list = var_pose + var_depth + var_flow
-        elif opt.mode == "depth":
-            var_train_list = var_pose + var_depth
-        elif opt.mode == "flow":
-            var_train_list = var_flow
-        else:
-            var_train_list = var_depth
-    return var_train_list, dict(pose=var_pose, depth=var_depth, flow=var_flow)
-
-def restore_from_pretrained(sess, var_dict):
-    if opt.mode == "depthflow": # train from 'depth' or 'depthflow' step
-        vars_to_restore = var_dict['pose'] + var_dict['depth'] + var_dict['flow']
-    elif opt.mode == "depth": # train from 'flow' step 
-        vars_to_restore = var_dict['flow']
-    else:
-        raise ValueError("pretrained_model not used. Please set train_test=test or retrain=False")
-    if not opt.retrain:
-        vars_to_restore += ['global_step']
-    saver_pretrained = tf.train.Saver(vars_to_restore, max_to_keep=1)
-    saver_pretrained.restore(sess, opt.pretrained_model)

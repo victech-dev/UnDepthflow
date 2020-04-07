@@ -9,7 +9,7 @@ from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
 from loss_utils import average_gradients
 from eval_kitti import evaluate_kitti
-from models import collect_variables, restore_from_pretrained
+from opt_utils import collect_and_restore_variables
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 100
@@ -31,7 +31,14 @@ def lr_scheduler(lr, prog):
         raise ValueError('Invalid learning rate')
 
 def train(Model, Model_eval, opt):
-    with tf.Graph().as_default():
+    with tf.Graph().as_default():        
+        # Make training session.
+        config = tf.ConfigProto()
+        config.allow_soft_placement = True
+        config.log_device_placement = False
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
+
         print('*** Constructing models and inputs.')
         global_step = tf.Variable(0, trainable=False, name='global_step')
         lr = tf.placeholder(tf.float32, name='learning_rate')
@@ -42,13 +49,10 @@ def train(Model, Model_eval, opt):
             with tf.name_scope("train_model"):
                 model = Model(image1, image2, image1r, image2r,
                     proj_cam2pix, proj_pix2cam, reuse_scope=False, scope=vs)
-                var_train_list, var_dict = collect_variables(vs)
+                var_train_list, var_restored = collect_and_restore_variables(vs, sess)
 
-                # VICTECH add regularization loss (why this is missed in original repo?)
-                loss = model.loss                        
                 reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-                # total_loss = loss + reg_loss (for now, turn off regularization)
-                total_loss = loss
+                total_loss = model.loss # + reg_loss (for now, turn off regularization)
                 train_op = optimizer.minimize(total_loss, global_step=global_step, var_list=var_train_list)
                 tf.summary.scalar('reg_loss', reg_loss)
                 tf.summary.scalar('total_loss', total_loss)
@@ -59,21 +63,13 @@ def train(Model, Model_eval, opt):
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
 
-        # Make training session.
-        config = tf.ConfigProto()
-        config.allow_soft_placement = True
-        config.log_device_placement = False
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-
         # Build the summary operation from the last tower summaries.
         summary_op = tf.summary.merge_all()
         summary_writer = tf.summary.FileWriter(opt.trace, graph=sess.graph, flush_secs=10)
 
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-        if opt.pretrained_model:
-            restore_from_pretrained(sess, var_dict)
+        # initialize variables (global + local - restored)
+        vars_to_init = set(tf.global_variables() + tf.local_variables()) - set(var_restored)
+        sess.run(tf.initialize_variables(list(vars_to_init)))
 
         start_itr = global_step.eval(session=sess)
 

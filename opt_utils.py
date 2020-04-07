@@ -1,22 +1,14 @@
 import os
+import tensorflow as tf
 from tensorflow.python.platform import flags
 from pathlib import Path
 import re
 
-def path_fix_existing(path: Path):
-    orgname = str(path.name)
-    suffix = 1
-    p = re.compile(orgname + r'_([1-9]\d*)$')
-    for subdir in path.parent.iterdir():
-        match = p.fullmatch(subdir.name)
-        if match:
-            suffix = max(suffix, int(match.group(1)) + 1)
-    return path.parent/f'{orgname}_{suffix}'
-
 flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
 flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
-flags.DEFINE_string('pretrained_model', '', 'filepath of a pretrained model to initialize from.')
-flags.DEFINE_string('mode', 'stereo', 'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
+flags.DEFINE_multi_string('pretrained_model', [], 'filepath of a pretrained model to initialize from.')
+flags.DEFINE_boolean("freeze_pretrained", False, "whether to freeze pretrained variables")
+flags.DEFINE_string('mode', 'depth', 'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')
@@ -50,6 +42,18 @@ flags.DEFINE_boolean('eval_flow', False, '')
 flags.DEFINE_boolean('eval_depth', False, '')
 flags.DEFINE_boolean('eval_mask', False, '')
 opt = flags.FLAGS
+
+
+def path_fix_existing(path: Path):
+    orgname = str(path.name)
+    suffix = 1
+    p = re.compile(orgname + r'_([1-9]\d*)$')
+    for subdir in path.parent.iterdir():
+        match = p.fullmatch(subdir.name)
+        if match:
+            suffix = max(suffix, int(match.group(1)) + 1)
+    return path.parent/f'{orgname}_{suffix}'
+
 
 def autoflags():
     # data path
@@ -94,3 +98,46 @@ def autoflags():
     print('*** Output path:', opt.trace)
 
     return Model, Model_eval
+
+
+def collect_and_restore_variables(scope, sess):
+    # collect variables
+    with tf.variable_scope(scope):
+        var_pose = list(set(tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*pose_net.*")))
+        var_depth = list(set(tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(depth_net|feature_net_disp).*")))
+        var_flow = list(set(tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope=".*(flow_net|feature_net_flow).*")))
+    var_dict = dict(pose=var_pose, depth=var_depth, flow=var_flow)
+
+    # restore variables
+    restored = set()
+    for model_path in opt.pretrained_model:
+        for net, var_list in var_dict.items():
+            if var_list:
+                try:
+                    saver_pretrained = tf.train.Saver(var_list, max_to_keep=1)
+                    saver_pretrained.restore(sess, model_path)
+                    print(f"*** [{net}] is restored from {model_path}")
+                    restored.update(var_list)
+                except:
+                    pass
+    restored = list(restored)
+
+    # collect trainable variables
+    if opt.mode == "depthflow":
+        nets_to_train = set(['pose', 'depth', 'flow'])
+    elif opt.mode == "depth":
+        nets_to_train = set(['pose', 'depth', 'flow'])
+    elif opt.mode == "flow":
+        nets_to_train = set(['flow'])
+    else:
+        nets_to_train = set(['depth'])
+    var_train_list = sum((var_dict[net] for net in nets_to_train), [])
+    if opt.freeze_pretrained:
+        var_train_list = list(set(var_train_list) - set(restored))
+    print("*** Count of variables to train:", len(var_train_list), "restored:", len(restored))
+    return var_train_list, restored
+
+

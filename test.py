@@ -8,7 +8,7 @@ import open3d as o3d
 from pathlib import Path
 import re
 
-from autoflags import opt, autoflags
+from opt_utils import opt, autoflags
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
