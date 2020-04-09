@@ -37,6 +37,8 @@ flags.DEFINE_float("flow_smooth_weight", 0.05, "Weight for flow smoothness")
 # for depthflow
 flags.DEFINE_float("flow_consist_weight", 0.01, "Weight for flow consistent")
 flags.DEFINE_float("flow_diff_threshold", 4.0, "threshold when comparing optical flow and rigid flow ")
+# for stereosv
+flags.DEFINE_float("stereosv_loss_weight", 0.01, "Weight for stereosv chabonnier loss")
 
 flags.DEFINE_string('eval_pose', '', 'pose seq to evaluate')
 

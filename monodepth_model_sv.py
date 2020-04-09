@@ -7,7 +7,7 @@ import tensorflow.contrib.slim as slim
 from opt_utils import opt
 from nets.pwc_disp import pwc_disp, feature_pyramid_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
-from loss_utils import disp_smoothness, SSIM
+from loss_utils import charbonnier_loss
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -27,13 +27,18 @@ class MonodepthModel(object):
 
             dispL_pyramid = self.scale_pyramid(left_disp, 4)
             dispR_pyramid = self.scale_pyramid(right_disp, 4)
-            SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
-            loss = 0
-            for s in range(4):
-                loss += SCALE_FACTOR[s] * tf.reduce_mean(tf.abs(dispL_pyramid[s] - self.disp_left_est[s]))
-                loss += SCALE_FACTOR[s] * tf.reduce_mean(tf.abs(dispR_pyramid[s] - self.disp_right_est[s]))
-            self.total_loss = loss
+            SCALE_FACTOR = np.array([1.0, 0.8, 0.6, 0.4])
 
+            loss = 0
+            disp_L1_loss = []
+            for s in range(4):
+                left_flow_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
+                right_flow_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
+                loss += SCALE_FACTOR[s] * (charbonnier_loss(left_flow_diff) + charbonnier_loss(right_flow_diff))
+                disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_flow_diff)) + tf.reduce_mean(tf.abs(right_flow_diff))))
+
+            self.total_loss = loss
+            self.disp_L1_loss = disp_L1_loss[-1]
 
     def scale_pyramid(self, img, num_scales):
         downsample = tf.keras.layers.AveragePooling2D(2)
@@ -91,8 +96,14 @@ class Model_stereosv(object):
             model = MonodepthModel('train', imageL, imageR, left_feature, right_feature, dispL, dispR)
             outputs = dict(disp=[model.disp1, model.disp2, model.disp3, model.disp4])
 
-        self.loss = model.total_loss
+        self.loss = opt.stereosv_loss_weight * model.total_loss
         self.outputs = dict(stereo=outputs)
+
+        # Create summaries once when multiple models are created in multiple gpu
+        if not tf.get_collection(tf.GraphKeys.SUMMARIES, scope=f'stereosv_losses/.*'):
+            with tf.name_scope('stereosv_losses/'):
+                tf.summary.scalar('total_loss', model.total_loss)
+                tf.summary.scalar('disp_L1_loss', model.disp_L1_loss)
 
 
 class Model_eval_stereosv(object):
