@@ -8,11 +8,12 @@ flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
 flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
 flags.DEFINE_list('pretrained_model', [], 'filepath of a pretrained model to initialize from.')
 flags.DEFINE_boolean("freeze_pretrained", False, "whether to freeze pretrained variables")
-flags.DEFINE_string('mode', 'depth', 'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
+flags.DEFINE_string('mode', 'stereosv', 'selection from four modes of ["flow", "depth", "depthflow", "stereo"]')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')
-flags.DEFINE_string('train_file', './filenames/kitti_train_files_png_4frames.txt', 'training file')
+#flags.DEFINE_string('train_file', './filenames/kitti_train_files_png_4frames.txt', 'training file')
+flags.DEFINE_string('train_file', './filenames/unrealstereo_filenames.txt', 'training file')
 flags.DEFINE_string('gt_2012_dir', '', 'directory of ground truth of kitti 2012')
 flags.DEFINE_string('gt_2015_dir', '', 'directory of ground truth of kitti 2015')
 
@@ -21,8 +22,10 @@ flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')
 flags.DEFINE_integer('num_gpus', 1, 'the number of gpu to use')
 flags.DEFINE_float('weight_decay', 1e-4, 'scale of l2 regularization')
 
-flags.DEFINE_integer("img_height", 256, "Image height")
-flags.DEFINE_integer("img_width", 832, "Image width")
+#flags.DEFINE_integer("img_height", 256, "Image height")
+#flags.DEFINE_integer("img_width", 832, "Image width")
+flags.DEFINE_integer("img_height", 384, "Image height")
+flags.DEFINE_integer("img_width", 512, "Image width")
 
 # common for all mode
 flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
@@ -55,7 +58,38 @@ def path_fix_existing(path: Path):
     return path.parent/f'{orgname}_{suffix}'
 
 
+
 def autoflags():
+    #DEBUG!!! stereosv
+    if opt.mode == 'stereosv':
+        # data path
+        dirs = [os.path.expanduser('~/datasets/unrealstereo'),
+            '/media/data/datasets/unrealstereo', '/media/vicnas/datasets/unrealstereo', 
+            'C:\\datasets\\unrealstereo', 'D:\\datasets\\unrealstereo', 
+            'E:\\datasets\\unrealstereo', 'M:\\datasets\\unrealstereo']
+        found = next((x for x in dirs if os.path.isdir(x)), None)
+        if found is None:
+            raise RuntimeError('UnrealStereo data not found!!')
+
+        opt.data_dir = found + os.path.sep
+        assert os.path.isdir(opt.data_dir)
+        print('*** UnrealStereo data path:', found)
+
+        # mode selection
+        from monodepth_model_sv import Model_stereosv as Model, Model_eval_stereosv as Model_eval
+        opt.eval_flow, opt.eval_depth, opt.eval_mask = False, False, False
+        print('*** Model mode:', opt.mode)
+
+        if opt.trace == 'AUTO':
+            trace = Path(f'.results_{opt.mode}')
+            if trace.exists():
+                trace = path_fix_existing(trace)
+            opt.trace = str(trace)
+        print('*** Output path:', opt.trace)
+        return Model, Model_eval
+    #DEBUG!!! stereosv
+
+
     # data path
     dirs = [os.path.expanduser('~/datasets/kitti_data'),
         '/media/data/datasets/kitti_data', '/media/vicnas/datasets/kitti_data', 
