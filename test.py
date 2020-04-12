@@ -18,26 +18,45 @@ from eval.pcd_utils import NavScene
 
 def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
+    if imgL.shape[2] == 4: 
+        imgL = imgL[:,:,:3]
     imgR = imgtool.imread(imgnameR)
-    K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
+    if imgR.shape[2] == 4: 
+        imgR = imgR[:,:,:3]
+    K = [320.0, 0.0, 320.0, 0.0, 320.0, 240.0, 0, 0, 1]
     K = np.array(K).reshape(3,3)
-    fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]
-    depth = model.predict_depth(sess, imgL, imgL, imgR, imgR, K, fxb)
+    fxb = 320.0 * 0.25 # baseline???
+
+    height, width = imgL.shape[:2] # original height, width
+    # session run
+    imgL_fit = imgtool.imresize(imgL, (opt.img_height, opt.img_width))
+    imgR_fit = imgtool.imresize(imgR, (opt.img_height, opt.img_width))
+    disp0 = sess.run(model.pred_disp, feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None]})
+    pred_disp = disp0[0,:,:,0:1]
+
+    # depth from disparity
+    pred_disp = width * cv2.resize(pred_disp, (width, height))
+    depth = fxb / pred_disp
     return imgL, depth, K
 
 
 def main(unused_argv):
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
-    opt.mode = 'stereo'
-    opt.pretrained_model = '.results_best/model-stereo'
-    Model, _ = autoflags()
+    opt.mode = 'stereosv'
+    opt.pretrained_model = '.results_stereosv/model-145003'
+    Model, Model_eval = autoflags()
 
     with tf.Graph().as_default(), tf.device('/gpu:0'):
         print('Constructing models and inputs.')
+        imageL = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_L')
+        imageR = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_R')
+        dispL = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_disp_L')
+        dispR = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_disp_R')
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("test_model"):
-                model = TestModel(Model, vs)
+                _ = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
+                model = Model_eval(scope=vs)
 
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
@@ -54,16 +73,16 @@ def main(unused_argv):
         saver.restore(sess, opt.pretrained_model)
 
         ''' point cloud test of KITTI 2015 gt '''
-        def ns_feeder(index):
-            i = index % 200
-            img1 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_10.png"))
-            img2 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_11.png"))
-            img1r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
-            img2r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
-            K = get_scaled_intrinsic_matrix(os.path.join(opt.gt_2015_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
-            fxb = width_to_focal[img1.shape[1]] * 0.54
-            depth = model.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
-            return img1, np.clip(depth, 0, 100), K
+        # def ns_feeder(index):
+        #     i = index % 200
+        #     img1 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_10.png"))
+        #     img2 = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_2", f"{i:06}_11.png"))
+        #     img1r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
+        #     img2r = imgtool.imread(os.path.join(opt.gt_2015_dir, "image_3", f"{i:06}_10.png"))
+        #     K = get_scaled_intrinsic_matrix(os.path.join(opt.gt_2015_dir, "calib_cam_to_cam", str(i).zfill(6) + ".txt"), 1.0, 1.0)
+        #     fxb = width_to_focal[img1.shape[1]] * 0.54
+        #     depth = model.predict_depth(sess, img1, img2, img1r, img2r, K, fxb)
+        #     return img1, np.clip(depth, 0, 100), K
 
         ''' point cloud test of KITTI raw data '''
         # data_dir = Path('M:\\datasets\\kitti_data\\kitti_raw_data\\2011_09_26\\2011_09_26_drive_0117_sync')
@@ -85,18 +104,15 @@ def main(unused_argv):
         #     img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
         #     return img, np.clip(depth, 0, 30), K
 
-        ''' point cloud test of RealSense camera '''
-        # data_dir = Path('M:\\datasets\\realsense\\rs_1584686898\\img')
-        # idx_regex = re.compile('.*-([0-9]+)$')
-        # images = sorted(Path(data_dir).glob('rs-output-Color-*.png'), key=lambda v: int(idx_regex.search(v.stem).group(1)))
-        # def ns_feeder(index):
-        #     imgname = images[index % len(images)]
-        #     depthname = (data_dir/imgname.stem.replace('Color', 'Depth')).with_suffix('.png')
-        #     img = imgtool.imread(imgname)
-        #     depth = imgtool.imread(depthname) * 0.001
-        #     #img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
-        #     K = np.array([[100, 0, 320], [0, 100, 240], [0, 0, 1]])
-        #     return img, np.clip(depth, 0, 30), K
+        ''' point cloud test of UnrealStereo data '''
+        data_dir = Path('M:\\datasets\\unrealstereo\\arch1_913')
+        imgnamesL = [f for f in (data_dir/'imL').glob('*.png') if not f.stem.startswith('gray')]
+        imgnamesL = sorted(imgnamesL, key=lambda v: int(v.stem))
+        def ns_feeder(index):
+            imgnameL = imgnamesL[index % len(imgnamesL)]
+            imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+            img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+            return img, np.clip(depth, 0, 30), K
 
         scene = NavScene(ns_feeder)
         scene.run()

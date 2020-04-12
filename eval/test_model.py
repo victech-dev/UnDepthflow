@@ -22,8 +22,8 @@ class TestModel(object):
     def __init__(self, train_model, scope):
         with tf.variable_scope(scope, reuse=False):
             img_shape = [1, opt.img_height, opt.img_width, 3]
-            self.image1 = tf.placeholder(tf.float32, img_shape, name='input_image1')
-            self.image2 = tf.placeholder(tf.float32, img_shape, name='input_image2')
+            self.imageL = tf.placeholder(tf.float32, img_shape, name='input_image1')
+            self.imageR = tf.placeholder(tf.float32, img_shape, name='input_image2')
             self.image1r = tf.placeholder(tf.float32, img_shape, name='input_image1r')
             self.image2r = tf.placeholder(tf.float32, img_shape, name='input_image2r')
             self.intrinsic = tf.placeholder(tf.float32, [3, 3])
