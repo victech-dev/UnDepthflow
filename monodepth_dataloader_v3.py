@@ -23,7 +23,7 @@ def read_disparity(opt, disp_path, H, W):
     disp = tf.cond(tf.equal(tf.rank(disp), 3), lambda: disp, lambda: tf.expand_dims(disp, -1))
     #DEBUG!! need to fix this
     #disp.set_shape([H, W, 1])
-    disp /= 640 # normalize
+    #disp /= 640 # normalize <-- UnrealStereo need this, Dexter already normalized
     disp.set_shape([480, 640, 1])
     #DEBUG!!
     disp = tf.image.resize(disp, [opt.img_height, opt.img_width], tf.image.ResizeMethod.AREA)

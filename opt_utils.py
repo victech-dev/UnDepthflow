@@ -13,7 +13,7 @@ flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')
 #flags.DEFINE_string('train_file', './filenames/kitti_train_files_png_4frames.txt', 'training file')
-flags.DEFINE_string('train_file', './filenames/unrealstereo_filenames.txt', 'training file')
+flags.DEFINE_string('train_file', './filenames/dexter_filenames.txt', 'training file')
 flags.DEFINE_string('gt_2012_dir', '', 'directory of ground truth of kitti 2012')
 flags.DEFINE_string('gt_2015_dir', '', 'directory of ground truth of kitti 2015')
 
@@ -65,17 +65,17 @@ def autoflags():
     #DEBUG!!! stereosv
     if opt.mode == 'stereosv':
         # data path
-        dirs = [os.path.expanduser('~/datasets/unrealstereo'),
-            '/media/data/datasets/unrealstereo', '/media/vicnas/datasets/unrealstereo', 
-            'C:\\datasets\\unrealstereo', 'D:\\datasets\\unrealstereo', 
-            'E:\\datasets\\unrealstereo', 'M:\\datasets\\unrealstereo']
+        dirs = [os.path.expanduser('~/datasets/dexter'),
+            '/media/data/datasets/dexter', '/media/vicnas/datasets/dexter', 
+            'C:\\datasets\\dexter', 'D:\\datasets\\dexter', 
+            'E:\\datasets\\dexter', 'M:\\datasets\\dexter']
         found = next((x for x in dirs if os.path.isdir(x)), None)
         if found is None:
-            raise RuntimeError('UnrealStereo data not found!!')
+            raise RuntimeError('Dexter data not found!!')
 
         opt.data_dir = found + os.path.sep
         assert os.path.isdir(opt.data_dir)
-        print('*** UnrealStereo data path:', found)
+        print('*** Dexter data path:', found)
 
         # mode selection
         from monodepth_model_sv import Model_stereosv as Model, Model_eval_stereosv as Model_eval
