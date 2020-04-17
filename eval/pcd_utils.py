@@ -47,8 +47,8 @@ class NavScene(object):
     def __init__(self, feeder):
         self.vis = o3d.visualization.VisualizerWithKeyCallback()
         self.vis.create_window()
-        self.vis.register_key_callback(44, functools.partial(self.load_frame, key='prev'))
-        self.vis.register_key_callback(46, functools.partial(self.load_frame, key='next')) 
+        self.vis.register_key_callback(8, functools.partial(self.load_frame, key='prev'))
+        self.vis.register_key_callback(32, functools.partial(self.load_frame, key='next')) 
         for geo in COORD_FRAMES:
             self.vis.add_geometry(geo)
         self.pcd = o3d.geometry.PointCloud()
