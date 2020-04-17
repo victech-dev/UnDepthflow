@@ -46,10 +46,6 @@ def read_image(image_path):
     img = cv2.resize(img, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     return img
 
-def tf_read_image(image_path):
-    img = tf.py_func(read_image, [image_path], tf.float32)
-    img.set_shape([opt.img_height, opt.img_width, 3])
-    return img
 
 def read_disparity(disp_path):
     disp = read_pfm(disp_path)
@@ -58,10 +54,6 @@ def read_disparity(disp_path):
     disp = cv2.resize(disp, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     return disp
 
-def tf_read_disparity(disp_path):
-    disp = tf.py_func(read_disparity, [disp_path], tf.float32)
-    disp.set_shape([opt.img_height, opt.img_width, 1])
-    return disp
 
 def read_pfm(file):
     if isinstance(file, bytes):
@@ -122,10 +114,14 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        imgL = tf_read_image(imgL_path)
-        imgR = tf_read_image(imgR_path)
-        dispL = tf_read_disparity(dispL_path)
-        dispR = tf_read_disparity(dispR_path)
+        imgL = tf.py_func(read_image, [imgL_path], tf.float32)
+        imgL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
+        imgR = tf.py_func(read_image, [imgR_path], tf.float32)
+        imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
+        dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
+        dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
+        dispR = tf.py_func(read_disparity, [dispR_path], tf.float32)
+        dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
