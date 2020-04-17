@@ -61,70 +61,26 @@ def path_fix_existing(path: Path):
     return path.parent/f'{orgname}_{suffix}'
 
 
-
 def autoflags():
-    #DEBUG!!! stereosv
-    if opt.mode == 'stereosv':
-        # data path
-        dirs = [os.path.expanduser('~/datasets/dexter'),
-            '/media/data/datasets/dexter', '/media/vicnas/datasets/dexter', 
-            'C:\\datasets\\dexter', 'D:\\datasets\\dexter', 
-            'E:\\datasets\\dexter', 'M:\\datasets\\dexter']
-        found = next((x for x in dirs if os.path.isdir(x)), None)
-        if found is None:
-            raise RuntimeError('Dexter data not found!!')
-
-        opt.data_dir = found + os.path.sep
-        assert os.path.isdir(opt.data_dir)
-        print('*** Dexter data path:', found)
-
-        # mode selection
-        from monodepth_model_sv import Model_stereosv as Model, Model_eval_stereosv as Model_eval
-        opt.eval_flow, opt.eval_depth, opt.eval_mask = False, False, False
-        print('*** Model mode:', opt.mode)
-
-        if opt.trace == 'AUTO':
-            trace = Path(f'.results_{opt.mode}')
-            if trace.exists():
-                trace = path_fix_existing(trace)
-            opt.trace = str(trace)
-        print('*** Output path:', opt.trace)
-        return Model, Model_eval
-    #DEBUG!!! stereosv
-
+    if opt.mode != 'stereosv':
+        raise Exception("! Only support stereosv now")
 
     # data path
-    dirs = [os.path.expanduser('~/datasets/kitti_data'),
-        '/media/data/datasets/kitti_data', '/media/vicnas/datasets/kitti_data', 
-        'C:\\datasets\\kitti_data', 'D:\\datasets\\kitti_data', 
-        'E:\\datasets\\kitti_data', 'M:\\datasets\\kitti_data']
+    dirs = [os.path.expanduser('~/datasets/dexter'),
+        '/media/data/datasets/dexter', '/media/vicnas/datasets/dexter', 
+        'C:\\datasets\\dexter', 'D:\\datasets\\dexter', 
+        'E:\\datasets\\dexter', 'M:\\datasets\\dexter']
     found = next((x for x in dirs if os.path.isdir(x)), None)
     if found is None:
-        raise RuntimeError('KITTI data not found!!')
+        raise RuntimeError('Dexter data not found!!')
 
-    opt.data_dir = os.path.join(found, 'kitti_raw_data') + os.path.sep
-    opt.gt_2012_dir = os.path.join(found, 'kitti_stereo_2012', 'training') + os.path.sep
-    opt.gt_2015_dir = os.path.join(found, 'kitti_stereo_2015', 'training') + os.path.sep
+    opt.data_dir = found + os.path.sep
     assert os.path.isdir(opt.data_dir)
-    assert os.path.isdir(opt.gt_2012_dir)
-    assert os.path.isdir(opt.gt_2015_dir)
-    print('*** KITTI data path:', found)
+    print('*** Dexter data path:', found)
 
     # mode selection
-    if opt.mode == "depthflow":  # stage 3: train depth and flow together
-        from models import Model_depthflow as Model, Model_eval_depthflow as Model_eval
-        opt.eval_flow, opt.eval_depth, opt.eval_mask = True, True, True
-    elif opt.mode == "depth":  # stage 2: train depth
-        from models import Model_depth as Model, Model_eval_depth as Model_eval
-        opt.eval_flow, opt.eval_depth, opt.eval_mask = True, True, False
-    elif opt.mode == "flow":  # stage 1: train flow
-        from models import Model_flow as Model, Model_eval_flow as Model_eval
-        opt.eval_flow, opt.eval_depth, opt.eval_mask = True, False, False
-    elif opt.mode == "stereo":
-        from models import Model_stereo as Model, Model_eval_stereo as Model_eval
-        opt.eval_flow, opt.eval_depth, opt.eval_mask = False, True, False
-    else:
-        raise "mode must be one of flow, depth, depthflow or stereo"
+    from monodepth_model_sv import Model_stereosv as Model, Model_eval_stereosv as Model_eval
+    opt.eval_flow, opt.eval_depth, opt.eval_mask = False, False, False
     print('*** Model mode:', opt.mode)
 
     if opt.trace == 'AUTO':
@@ -133,7 +89,6 @@ def autoflags():
             trace = path_fix_existing(trace)
         opt.trace = str(trace)
     print('*** Output path:', opt.trace)
-
     return Model, Model_eval
 
 
