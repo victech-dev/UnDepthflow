@@ -49,10 +49,8 @@ def read_image(image_path):
 
 def read_disparity(disp_path):
     disp = read_pfm(disp_path)
-    if len(disp.shape) == 2:
-        disp = np.expand_dims(disp, -1)
     disp = cv2.resize(disp, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    return disp
+    return np.atleast_3d(disp)
 
 
 def read_pfm(file):
