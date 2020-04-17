@@ -115,19 +115,24 @@ def batch_from_dataset():
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
         imgL = tf.py_func(read_image, [imgL_path], tf.float32)
-        imgL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
         imgR = tf.py_func(read_image, [imgR_path], tf.float32)
-        imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
         dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
-        dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
         dispR = tf.py_func(read_disparity, [dispR_path], tf.float32)
-        dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # repeat, batch
     ds = ds.repeat(-1).batch(opt.batch_size)
 
+    # dimension hint required
+    def _setshape(imgL, imgR, dispL, dispR):
+        imgL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
+        imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
+        dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
+        dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
+        return imgL, imgR, dispL, dispR
+    ds = ds.map(_setshape, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    
     # prefetch
     ds = ds.prefetch(16)
 
