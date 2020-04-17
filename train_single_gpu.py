@@ -4,8 +4,7 @@ from tqdm import trange
 import sys
 import functools
 
-from monodepth_dataloader_v2 import batch_from_dataset
-from monodepth_dataloader_v3 import batch_from_dataset as batch_from_dataset_sv
+from monodepth_dataloader_v3 import batch_from_dataset
 
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
@@ -47,16 +46,13 @@ def train(Model, Model_eval, opt):
         optimizer = tf.train.AdamOptimizer(lr)
 
         if opt.mode == 'stereosv':
-            imageL, imageR, dispL, dispR = batch_from_dataset_sv(opt)
+            imageL, imageR, dispL, dispR = batch_from_dataset()
         else:
-            image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
+            raise ValueError('! Only supervised stereo possible now')
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("train_model"):
-                if opt.mode == 'stereosv':
-                    model = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
-                else:
-                    model = Model(image1, image2, image1r, image2r, proj_cam2pix, proj_pix2cam, reuse_scope=False, scope=vs)
+                model = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
                 var_train_list, var_restored = collect_and_restore_variables(vs, sess)
 
                 reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
@@ -105,14 +101,14 @@ def train(Model, Model_eval, opt):
             if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                 saver.save(sess, opt.trace + '/model', global_step=global_step)
 
-            # Evaluate and write to tensorboard
-            if opt.mode != 'stereosv' and (itr) % (VAL_INTERVAL) == 100:
-                result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
-                flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
-                summary = tf.Summary()
-                for k, v in flatten:
-                    summary.value.add(tag=k, simple_value=v)
-                summary_writer.add_summary(summary, itr)
-                summary_writer.flush()
+            # # Evaluate and write to tensorboard
+            # if opt.mode != 'stereosv' and (itr) % (VAL_INTERVAL) == 100:
+            #     result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
+            #     flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
+            #     summary = tf.Summary()
+            #     for k, v in flatten:
+            #         summary.value.add(tag=k, simple_value=v)
+            #     summary_writer.add_summary(summary, itr)
+            #     summary_writer.flush()
 
     print('*** Done')

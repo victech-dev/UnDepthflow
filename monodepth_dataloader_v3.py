@@ -2,31 +2,65 @@ import tensorflow as tf
 import re
 import numpy as np
 import imgtool
+import cv2
+from opt_utils import opt
 
-def read_image(opt, image_path, get_shape=False):
-    # tf.decode_image does not return the image size, this is an ugly workaround to handle both jpeg and png
-    file_extension = tf.strings.substr(image_path, -3, 3)
-    file_cond = tf.equal(file_extension, 'jpg')
-    image = tf.cond(
-        file_cond, lambda: tf.image.decode_jpeg(tf.io.read_file(image_path)),
-        lambda: tf.image.decode_png(tf.io.read_file(image_path)))
+def inject_bayer_pattern_noise(img, pattern='GB'):
+    h, w = img.shape[:2]
+    gk = np.zeros([h,w], img.dtype)
+    bk = np.zeros([h,w], img.dtype)
+    rk = np.zeros([h,w], img.dtype)
+
+    # green kernel
+    if pattern == 'GB' or pattern == 'GR':
+        gk[::2,::2] = 1; gk[1::2,1::2] = 1
+    elif pattern == 'BG' or pattern == 'RG':
+        gk[::2,1::2] = 1; gk[1::2,::2] = 1
+
+    # blue, red kernel
+    if pattern == 'GB':
+        bk[1::2,::2] = 1; rk[::2,1::2] = 1
+    elif pattern == 'BG':
+        bk[1::2,1::2] = 1; rk[::2,::2] = 1
+    elif pattern == 'GR':
+        bk[::2,1::2] = 1; rk[1::2,::2] = 1
+    elif pattern == 'RG':
+        bk[::2,::2] = 1; rk[1::2,1::2] = 1
+        
+    bayer = img[:,:,0] * rk + img[:,:,1] * gk + img[:,:,2] * bk
+    cvt_code = dict(GB=cv2.COLOR_BayerGB2RGB, BG=cv2.COLOR_BayerBG2RGB, 
+                    GR=cv2.COLOR_BayerGR2RGB, RG=cv2.COLOR_BayerRG2RGB)
+    return cv2.cvtColor(bayer, cvt_code[pattern])
+
+def read_image(image_path):
+    if isinstance(image_path, bytes):
+        image_path = image_path.decode()
+    img = imgtool.imread(image_path)
+    h, w = img.shape[:2]
     # if image has 4 channels, we assume that this is RGBA png format
-    image = tf.cond(tf.equal(tf.shape(image)[2], 3), lambda: image, lambda: image[:,:,:3])
-    orig_height = tf.shape(image)[0]
-    orig_width = tf.shape(image)[1]
-    image = tf.image.convert_image_dtype(image, tf.float32)
-    image = tf.image.resize(image, [opt.img_height, opt.img_width], tf.image.ResizeMethod.AREA)
-    return (image, orig_height, orig_width) if get_shape else image
+    if img.shape[2] == 4:
+        img = img[:,:,:3]
+    if opt.bayer_pattern:
+        img = inject_bayer_pattern_noise(img, opt.bayer_pattern)
+    img = (img / 255).astype(np.float32)
+    img = cv2.resize(img, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    return img
 
-def read_disparity(opt, disp_path, H, W):
-    disp = tf.py_func(read_pfm, [disp_path], tf.float32)
-    disp = tf.cond(tf.equal(tf.rank(disp), 3), lambda: disp, lambda: tf.expand_dims(disp, -1))
-    #DEBUG!! need to fix this
-    #disp.set_shape([H, W, 1])
-    #disp /= 640 # normalize <-- UnrealStereo need this, Dexter already normalized
-    disp.set_shape([480, 640, 1])
-    #DEBUG!!
-    disp = tf.image.resize(disp, [opt.img_height, opt.img_width], tf.image.ResizeMethod.AREA)
+def tf_read_image(image_path):
+    img = tf.py_func(read_image, [image_path], tf.float32)
+    img.set_shape([opt.img_height, opt.img_width, 3])
+    return img
+
+def read_disparity(disp_path):
+    disp = read_pfm(disp_path)
+    if len(disp.shape) == 2:
+        disp = np.expand_dims(disp, -1)
+    disp = cv2.resize(disp, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    return disp
+
+def tf_read_disparity(disp_path):
+    disp = tf.py_func(read_disparity, [disp_path], tf.float32)
+    disp.set_shape([opt.img_height, opt.img_width, 1])
     return disp
 
 def read_pfm(file):
@@ -69,7 +103,7 @@ def read_pfm(file):
     #return data, scale
     return data.astype(np.float32)
 
-def batch_from_dataset(opt):
+def batch_from_dataset():
     ds = tf.data.TextLineDataset(opt.train_file)
 
     # convert line to (path0, path1, ... path4)
@@ -88,24 +122,15 @@ def batch_from_dataset(opt):
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        imgL, H, W = read_image(opt, imgL_path, get_shape=True)
-        imgR = read_image(opt, imgR_path)
-        dispL = read_disparity(opt, dispL_path, H, W)
-        dispR = read_disparity(opt, dispR_path, H, W)
+        imgL = tf_read_image(imgL_path)
+        imgR = tf_read_image(imgR_path)
+        dispL = tf_read_disparity(dispL_path)
+        dispR = tf_read_disparity(dispR_path)
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # repeat, batch
     ds = ds.repeat(-1).batch(opt.batch_size)
-
-    # dimension hint required
-    def _setshape(imgL, imgR, dispL, dispR):
-        imgL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
-        imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
-        dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
-        dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
-        return imgL, imgR, dispL, dispR
-    ds = ds.map(_setshape, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # prefetch
     ds = ds.prefetch(16)
@@ -118,20 +143,20 @@ def batch_from_dataset(opt):
 if __name__ == '__main__':
     import os
     from collections import namedtuple
-    import cv2
 
     opt = {}
-    opt['data_dir'] = 'M:/datasets/unrealstereo/'
-    opt['train_file'] = './filenames/filenames.txt'
+    opt['data_dir'] = 'M:/datasets/dexter/'
+    opt['train_file'] = './filenames/dexter_filenames.txt'
     opt['batch_size'] = 4
     opt['img_height'] = 384
     opt['img_width'] = 512
     opt['num_scales'] = 4
+    opt['bayer_pattern'] = 'GB'
     Option = namedtuple('Option', opt.keys())
     opt = Option(**opt)
 
     with tf.Graph().as_default(), tf.device('/cpu:0'):
-        element = batch_from_dataset(opt)
+        element = batch_from_dataset()
         sess = tf.Session()
         for i in range(256):
             imgL, imgR, dispL, dispR = sess.run(element)

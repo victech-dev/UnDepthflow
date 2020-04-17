@@ -4,8 +4,7 @@ from tqdm import trange
 import sys
 import functools
 
-from monodepth_dataloader_v2 import batch_from_dataset
-from monodepth_dataloader_v3 import batch_from_dataset as batch_from_dataset_sv
+from monodepth_dataloader_v3 import batch_from_dataset
 
 from eval.evaluate_flow import load_gt_flow_kitti
 from eval.evaluate_mask import load_gt_mask
@@ -47,19 +46,13 @@ def train(Model, Model_eval, opt):
         train_op = tf.train.AdamOptimizer(lr)
 
         if opt.mode == 'stereosv':
-            imageL, imageR, dispL, dispR = batch_from_dataset_sv(opt)
+            imageL, imageR, dispL, dispR = batch_from_dataset()
             split_imageL = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=imageL)
             split_imageR = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=imageR)
             split_dispL = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=dispL)
             split_dispR = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=dispR)
         else:
-            image1, image1r, image2, image2r, proj_cam2pix, proj_pix2cam = batch_from_dataset(opt)
-            split_image1 = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=image1)
-            split_image2 = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=image2)
-            split_cam2pix = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=proj_cam2pix)
-            split_pix2cam = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=proj_pix2cam)
-            split_image_r = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=image1r)
-            split_image_r_next = tf.split(axis=0, num_or_size_splits=opt.num_gpus, value=image2r)
+            raise ValueError('! Only supervised stereo possible now')
 
         tower_grads = []
         with tf.variable_scope(tf.get_variable_scope()) as vs:
@@ -67,12 +60,7 @@ def train(Model, Model_eval, opt):
                 with tf.device(f'/gpu:{i}'):
                     scopename = "train_model" if i == 0 else f'tower_{i}'
                     with tf.name_scope(scopename):
-                        if opt.mode == 'stereosv':
-                            model = Model(split_imageL[i], split_imageR[i], split_dispL[i], split_dispR[i], reuse_scope=(i > 0), scope=vs)
-                        else:
-                            model = Model(split_image1[i], split_image2[i], 
-                                split_image_r[i], split_image_r_next[i], 
-                                split_cam2pix[i], split_pix2cam[i], reuse_scope=(i > 0), scope=vs)
+                        model = Model(split_imageL[i], split_imageR[i], split_dispL[i], split_dispR[i], reuse_scope=(i > 0), scope=vs)
 
                         # Note variables and summaries reside in first GPU
                         if i == 0:
@@ -137,13 +125,13 @@ def train(Model, Model_eval, opt):
             if (itr) % (SAVE_INTERVAL) == 2 or itr == opt.num_iterations-1:
                 saver.save(sess, opt.trace + '/model', global_step=global_step)
 
-            if opt.mode != 'stereosv' and (itr) % (VAL_INTERVAL) == 100:
-                result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
-                flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
-                summary = tf.Summary()
-                for k, v in flatten:
-                    summary.value.add(tag=k, simple_value=v)
-                summary_writer.add_summary(summary, itr)
-                summary_writer.flush()
+            # if opt.mode != 'stereosv' and (itr) % (VAL_INTERVAL) == 100:
+            #     result = evaluate_kitti(sess, eval_model, itr, gt_flows_2012, noc_masks_2012, gt_flows_2015, noc_masks_2015, gt_masks)
+            #     flatten = [(f'{k1}/{k2}', v) for k1, k2v in result.items() for k2, v in k2v.items()]
+            #     summary = tf.Summary()
+            #     for k, v in flatten:
+            #         summary.value.add(tag=k, simple_value=v)
+            #     summary_writer.add_summary(summary, itr)
+            #     summary_writer.flush()
 
 
