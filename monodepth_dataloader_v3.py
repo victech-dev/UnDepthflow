@@ -52,7 +52,6 @@ def apply_brightness_contrast(img, brightness = 0, contrast = 0):
         f = 131*(contrast + 127)/(127*(131-contrast))
         alpha_c = f
         gamma_c = 127*(1-f)
-        print(alpha_c, gamma_c)
 
         buf = cv2.addWeighted(buf, alpha_c, buf, 0, gamma_c)
 
