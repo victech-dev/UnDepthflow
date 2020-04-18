@@ -58,26 +58,15 @@ def apply_brightness_contrast(img, brightness = 0, contrast = 0):
     return buf    
 
 
-def read_image(image_path, seed, additional_noise):
+def read_image(image_path):
     if isinstance(image_path, bytes):
         image_path = image_path.decode()
     img = imgtool.imread(image_path)
-    rand = np.random.RandomState(seed)
     
     # if image has 4 channels, we assume that this is RGBA png format
     if img.shape[2] == 4:
         img = img[:,:,:3]
     
-    # brightness, contrast noise
-    if opt.brightness_contrast_noise > 0:
-        brightness = rand.randint(opt.brightness_contrast_noise + 1)
-        contrast = rand.randint(brightness + 1)
-        if additional_noise:
-            factor = np.random.uniform(0.9,1.0)
-            brightness = int(brightness * factor)
-            contrast = int(contrast * factor)
-        img = apply_brightness_contrast(img, brightness=brightness, contrast=contrast)
-
     # bayer_patter noise
     if opt.bayer_pattern:
         img = inject_bayer_pattern_noise(img, opt.bayer_pattern)
@@ -151,11 +140,29 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        seed = tf.random.uniform([], 0, 2**30, tf.int32)
-        imgL = tf.py_func(read_image, [imgL_path, seed, False], tf.float32)
-        imgR = tf.py_func(read_image, [imgR_path, seed, True], tf.float32)
+        imgL = tf.py_func(read_image, [imgL_path], tf.float32)
+        imgR = tf.py_func(read_image, [imgR_path], tf.float32)
         dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
         dispR = tf.py_func(read_disparity, [dispR_path], tf.float32)
+
+        if opt.hue_delta > 0.0:
+            h1 = opt.hue_delta * tf.random.uniform([], -1.0, 1.0)
+            h2 = h1 * tf.random.uniform([], 0.9, 1.1)
+            imgL = tf.image.adjust_hue(imgL, h1)
+            imgR = tf.image.adjust_hue(imgR, h2)
+
+        if opt.brightness_delta > 0.0:
+            b1 = opt.brightness_delta * tf.random.uniform([], -1.0, 1.0)
+            b2 = b1 * tf.random.uniform([], 0.9, 1.1)
+            imgL = tf.image.adjust_brightness(imgL, b1)
+            imgR = tf.image.adjust_brightness(imgR, b2)
+        
+        if opt.contrast_scale > 1.0:
+            c1 = tf.random.uniform([], 1.0, opt.contrast_scale)
+            c2 = c1 * tf.random.uniform([], 0.9, 1.1)
+            imgL = tf.image.adjust_contrast(imgL, c1)
+            imgR = tf.image.adjust_contrast(imgR, c2)
+
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
@@ -191,7 +198,9 @@ if __name__ == '__main__':
     opt['img_width'] = 512
     opt['num_scales'] = 4
     opt['bayer_pattern'] = 'GB'
-    opt['brightness_contrast_noise'] = 64
+    opt['hue_delta'] = 0.08
+    opt['brightness_delta'] = 0.15
+    opt['contrast_scale'] = 2.0
     Option = namedtuple('Option', opt.keys())
     opt = Option(**opt)
 
