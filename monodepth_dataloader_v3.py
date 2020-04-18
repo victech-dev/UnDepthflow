@@ -152,7 +152,7 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        seed = tf.random.uniform([], 2**30, tf.int32)
+        seed = tf.random.uniform([], 0, 2**30, tf.int32)
         imgL = tf.py_func(read_image, [imgL_path, seed, False], tf.float32)
         imgR = tf.py_func(read_image, [imgR_path, seed, True], tf.float32)
         dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
