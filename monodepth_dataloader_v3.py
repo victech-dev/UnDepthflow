@@ -191,6 +191,7 @@ if __name__ == '__main__':
     opt['img_width'] = 512
     opt['num_scales'] = 4
     opt['bayer_pattern'] = 'GB'
+    opt['brightness_contrast_noise'] = 64
     Option = namedtuple('Option', opt.keys())
     opt = Option(**opt)
 

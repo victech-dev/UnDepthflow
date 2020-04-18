@@ -18,7 +18,7 @@ flags.DEFINE_string('gt_2012_dir', '', 'directory of ground truth of kitti 2012'
 flags.DEFINE_string('gt_2015_dir', '', 'directory of ground truth of kitti 2015')
 
 flags.DEFINE_string('bayer_pattern', 'GB', 'bayer patterh noise injection during training')
-flags.DEFINE_integer('brightness_contrast_noise', 96, 'brightness contrast noise injection during training')
+flags.DEFINE_integer('brightness_contrast_noise', 64, 'brightness contrast noise injection during training')
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')
