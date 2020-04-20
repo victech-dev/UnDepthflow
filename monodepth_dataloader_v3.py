@@ -33,31 +33,6 @@ def inject_bayer_pattern_noise(img, pattern='GB'):
     return cv2.cvtColor(bayer, cvt_code[pattern])
 
 
-def apply_brightness_contrast(img, brightness = 0, contrast = 0):
-    if brightness != 0:
-        if brightness > 0:
-            shadow = brightness
-            highlight = 255
-        else:
-            shadow = 0
-            highlight = 255 + brightness
-        alpha_b = (highlight - shadow)/255
-        gamma_b = shadow
-
-        buf = cv2.addWeighted(img, alpha_b, img, 0, gamma_b)
-    else:
-        buf = img.copy()
-
-    if contrast != 0:
-        f = 131*(contrast + 127)/(127*(131-contrast))
-        alpha_c = f
-        gamma_c = 127*(1-f)
-
-        buf = cv2.addWeighted(buf, alpha_c, buf, 0, gamma_c)
-
-    return buf    
-
-
 def read_image(image_path):
     if isinstance(image_path, bytes):
         image_path = image_path.decode()
@@ -193,7 +168,7 @@ if __name__ == '__main__':
     opt = {}
     opt['data_dir'] = 'M:/datasets/dexter/'
     opt['train_file'] = './filenames/dexter_filenames.txt'
-    opt['batch_size'] = 4
+    opt['batch_size'] = 1
     opt['img_height'] = 384
     opt['img_width'] = 512
     opt['num_scales'] = 4
@@ -209,7 +184,16 @@ if __name__ == '__main__':
         sess = tf.Session()
         for i in range(256):
             imgL, imgR, dispL, dispR = sess.run(element)
-            imgtool.imshow(imgL[0])
-            imgtool.imshow(dispL[0])
+            imgL, imgR = imgL[0], imgR[0]
+            dispL, dispR = dispL[0], dispR[0]
+            H, W = imgL.shape[:2]
+            tiled = np.zeros((H*2, W*2, 3), np.uint8)
+            tiled[:H,:W] = cv2.convertScaleAbs(imgL, alpha=255)
+            tiled[:H,W:] = cv2.convertScaleAbs(imgR, alpha=255)
+            disp = np.concatenate([dispL, dispR], axis=1)
+            disp = cv2.normalize(disp, None, 0, 1, cv2.NORM_MINMAX)
+            disp = cv2.convertScaleAbs(disp, alpha=255)
+            tiled[H:] = np.atleast_3d(disp)
+            imgtool.imshow(tiled)
 
 

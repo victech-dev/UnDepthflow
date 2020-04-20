@@ -33,17 +33,17 @@ class MonodepthModel(object):
             disp_L1_loss = []
             MINDISP = 1e-3
             for s in range(4):
-                left_pixel_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
-                right_pixel_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
-                left_log_diff = tf.log(tf.maximum(dispL_pyramid[s], MINDISP)) - tf.log(self.disp_left_est[s])
-                right_log_diff = tf.log(tf.maximum(dispR_pyramid[s], MINDISP)) - tf.log(self.disp_right_est[s])
-                loss += SCALE_FACTOR[s] * (tf.reduce_mean(tf.abs(left_log_diff)) + tf.reduce_mean(tf.abs(right_log_diff)))
-                disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_pixel_diff)) + tf.reduce_mean(tf.abs(right_pixel_diff))))
+                # left_pixel_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
+                # right_pixel_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
+                # left_log_diff = tf.log(tf.maximum(dispL_pyramid[s], MINDISP)) - tf.log(self.disp_left_est[s])
+                # right_log_diff = tf.log(tf.maximum(dispR_pyramid[s], MINDISP)) - tf.log(self.disp_right_est[s])
+                # loss += SCALE_FACTOR[s] * (tf.reduce_mean(tf.abs(left_log_diff)) + tf.reduce_mean(tf.abs(right_log_diff)))
+                # disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_pixel_diff)) + tf.reduce_mean(tf.abs(right_pixel_diff))))
 
-                #left_flow_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
-                #right_flow_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
-                #loss += SCALE_FACTOR[s] * (charbonnier_loss(left_flow_diff) + charbonnier_loss(right_flow_diff))
-                #disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_flow_diff)) + tf.reduce_mean(tf.abs(right_flow_diff))))
+                left_flow_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
+                right_flow_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
+                loss += SCALE_FACTOR[s] * (charbonnier_loss(left_flow_diff) + charbonnier_loss(right_flow_diff))
+                disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_flow_diff)) + tf.reduce_mean(tf.abs(right_flow_diff))))
 
             self.total_loss = loss
             self.disp_L1_loss = disp_L1_loss[0]
