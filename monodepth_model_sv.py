@@ -31,19 +31,19 @@ class MonodepthModel(object):
 
             loss = 0
             disp_L1_loss = []
-            MINDISP = 1e-3
             for s in range(4):
-                # left_pixel_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
-                # right_pixel_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
-                # left_log_diff = tf.log(tf.maximum(dispL_pyramid[s], MINDISP)) - tf.log(self.disp_left_est[s])
-                # right_log_diff = tf.log(tf.maximum(dispR_pyramid[s], MINDISP)) - tf.log(self.disp_right_est[s])
-                # loss += SCALE_FACTOR[s] * (tf.reduce_mean(tf.abs(left_log_diff)) + tf.reduce_mean(tf.abs(right_log_diff)))
-                # disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_pixel_diff)) + tf.reduce_mean(tf.abs(right_pixel_diff))))
+                left_pixel_error = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
+                right_pixel_error = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
+                disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_pixel_error)) + tf.reduce_mean(tf.abs(right_pixel_error))))
 
-                left_flow_diff = opt.img_width * (dispL_pyramid[s] - self.disp_left_est[s])
-                right_flow_diff = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
-                loss += SCALE_FACTOR[s] * (charbonnier_loss(left_flow_diff) + charbonnier_loss(right_flow_diff))
-                disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_flow_diff)) + tf.reduce_mean(tf.abs(right_flow_diff))))
+                if opt.loss_metric == 'rmsle': # rmse of log 
+                    left_error = tf.squared_difference(tf.log(1.0 + dispL_pyramid[s]), tf.log(1.0 + self.disp_left_est[s]))
+                    right_error = tf.squared_difference(tf.log(1.0 + dispR_pyramid[s]), tf.log(1.0 + self.disp_right_est[s]))
+                    loss += SCALE_FACTOR[s] * (tf.reduce_mean(left_error) + tf.reduce_mean(right_error))
+                elif opt.loss_metric == 'charbonnier':
+                    loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
+                else:
+                    raise ValueError('! Unsupported loss metric')
 
             self.total_loss = loss
             self.disp_L1_loss = disp_L1_loss[0]
@@ -104,7 +104,7 @@ class Model_stereosv(object):
             model = MonodepthModel('train', imageL, imageR, left_feature, right_feature, dispL, dispR)
             outputs = dict(disp=[model.disp1, model.disp2, model.disp3, model.disp4])
 
-        self.loss = opt.stereosv_loss_weight * model.total_loss
+        self.loss = model.total_loss
         self.outputs = dict(stereo=outputs)
 
         # Create summaries once when multiple models are created in multiple gpu
