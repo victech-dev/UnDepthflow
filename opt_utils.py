@@ -24,6 +24,7 @@ flags.DEFINE_float('brightness_delta', 0.15, 'brightness noise injection during 
 flags.DEFINE_float('contrast_scale', 3.0, 'contrast noise injection during training')
 flags.DEFINE_list('rgb_shift', [0.1, 0.1, 0.2], 'rgb shift during training')
 flags.DEFINE_list('gamma_transform', [0.7, 1.5], 'adjust gamma during training')
+flags.DEFINE_integer('radial_blur', 5, 'max iteration count for radial blur')
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')

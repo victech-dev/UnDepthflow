@@ -32,6 +32,28 @@ def inject_bayer_pattern_noise(img, pattern='GB'):
                     GR=cv2.COLOR_BayerGR2RGB, RG=cv2.COLOR_BayerRG2RGB)
     return cv2.cvtColor(bayer, cvt_code[pattern])
 
+def radial_blur(img, iterations):
+    if not hasattr(radial_blur, 'ZOOM_MAP'):
+        h, w = img.shape[:2]
+        cx, cy = (w-1) / 2, (h-1) / 2
+        zoomout_mapx, zoomout_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+        zoomin_mapx, zoomin_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+        # 1 pixel offset for border of image
+        zoomout_mapx += (zoomout_mapx - cx) * (2/w) 
+        zoomout_mapy += (zoomout_mapy - cy) * (2/h)
+        zoomin_mapx -= (zoomin_mapx - cx) * (2/w)
+        zoomin_mapy -= (zoomin_mapy - cy) * (2/h)
+        radial_blur.ZOOM_MAP = (zoomout_mapx, zoomout_mapy, zoomin_mapx, zoomin_mapy)
+
+    zoomout_mapx, zoomout_mapy, zoomin_mapx, zoomin_mapy = radial_blur.ZOOM_MAP
+    assert img.shape[:2] == zoomout_mapx.shape[:2]
+
+    for _ in range(iterations):    
+        zo = cv2.remap(img, zoomout_mapx, zoomout_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+        zi = cv2.remap(img, zoomin_mapx, zoomin_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+        img = cv2.addWeighted(zo, 0.5, zi, 0.5, 0) # blend back to src
+    return img
+
 def read_image(imgL_path, imgR_path):
     if isinstance(imgL_path, bytes):
         imgL_path = imgL_path.decode()
@@ -86,6 +108,12 @@ def read_image(imgL_path, imgR_path):
     if opt.bayer_pattern:
         imgL = inject_bayer_pattern_noise(imgL, opt.bayer_pattern)
         imgR = inject_bayer_pattern_noise(imgR, opt.bayer_pattern)
+
+    # inject radial blur
+    if opt.radial_blur > 0:
+        iterations = np.random.randint(0, opt.radial_blur + 1)
+        imgL = radial_blur(imgL, iterations)
+        imgR = radial_blur(imgR, iterations)
 
     imgL = (imgL / 255).astype(np.float32)
     imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
