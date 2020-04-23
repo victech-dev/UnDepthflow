@@ -67,12 +67,20 @@ def read_image(imgL_path, imgR_path):
         imgR = cv2.cvtColor(imgR_hls, cv2.COLOR_HLS2RGB)
 
     # rgb shift
-    if opt.rgb_shift:
+    if isinstance(opt.rgb_shift, (list,tuple)) and len(opt.rgb_shift) == 3:
         smax = np.array(opt.rgb_shift, np.float) * 255
         s1 = np.random.uniform(-smax, smax)
         s2 = np.clip(np.random.uniform(-smax, smax), s1-smax, s1+smax)
         imgL = cv2.add(imgL, s1[None])
         imgR = cv2.add(imgR, s2[None])
+
+    # gamma transform
+    if isinstance(opt.gamma_transform, (list,tuple)) and len(opt.gamma_transform) == 2:
+        gamma = np.random.uniform(opt.gamma_transform[0], opt.gamma_transform[1])
+        table = (np.arange(0, 256.0 / 255, 1.0 / 255) ** gamma) * 255
+        table = table.astype(np.uint8)
+        imgL = cv2.LUT(imgL, table)
+        imgR = cv2.LUT(imgR, table)
 
     # bayer_patter noise
     if opt.bayer_pattern:
