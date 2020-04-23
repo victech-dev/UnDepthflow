@@ -36,9 +36,9 @@ class MonodepthModel(object):
                 right_pixel_error = opt.img_width * (dispR_pyramid[s] - self.disp_right_est[s])
                 disp_L1_loss.append(0.5 * (tf.reduce_mean(tf.abs(left_pixel_error)) + tf.reduce_mean(tf.abs(right_pixel_error))))
 
-                if opt.loss_metric == 'rmsle': # rmse of log 
-                    left_error = tf.squared_difference(tf.log(1.0 + dispL_pyramid[s]), tf.log(1.0 + self.disp_left_est[s]))
-                    right_error = tf.squared_difference(tf.log(1.0 + dispR_pyramid[s]), tf.log(1.0 + self.disp_right_est[s]))
+                if opt.loss_metric == 'l1-log': # l1 of log
+                    left_error = tf.abs(tf.log(1.0 + dispL_pyramid[s]) - tf.log(1.0 + self.disp_left_est[s]))
+                    right_error = tf.abs(tf.log(1.0 + dispR_pyramid[s]) - tf.log(1.0 + self.disp_right_est[s]))
                     loss += SCALE_FACTOR[s] * (tf.reduce_mean(left_error) + tf.reduce_mean(right_error))
                 elif opt.loss_metric == 'charbonnier':
                     loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
