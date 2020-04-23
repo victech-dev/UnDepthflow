@@ -17,10 +17,12 @@ flags.DEFINE_string('train_file', './filenames/dexter_filenames.txt', 'training 
 flags.DEFINE_string('gt_2012_dir', '', 'directory of ground truth of kitti 2012')
 flags.DEFINE_string('gt_2015_dir', '', 'directory of ground truth of kitti 2015')
 
+# training data augmentation
 flags.DEFINE_string('bayer_pattern', 'GB', 'bayer patterh noise injection during training')
 flags.DEFINE_float('hue_delta', 0.1, 'hue noise injection during training')
 flags.DEFINE_float('brightness_delta', 0.15, 'brightness noise injection during training')
 flags.DEFINE_float('contrast_scale', 3.0, 'contrast noise injection during training')
+flags.DEFINE_list('rgb_shift', [0.1, 0.1, 0.2], 'rgb shift during training')
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')

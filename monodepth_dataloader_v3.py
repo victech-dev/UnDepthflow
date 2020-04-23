@@ -66,6 +66,14 @@ def read_image(imgL_path, imgR_path):
         imgL = cv2.cvtColor(imgL_hls, cv2.COLOR_HLS2RGB)
         imgR = cv2.cvtColor(imgR_hls, cv2.COLOR_HLS2RGB)
 
+    # rgb shift
+    if opt.rgb_shift:
+        smax = np.array(opt.rgb_shift, np.float) * 255
+        s1 = np.random.uniform(-smax, smax)
+        s2 = np.clip(np.random.uniform(-smax, smax), s1-smax, s1+smax)
+        imgL = cv2.add(imgL, s1[None])
+        imgR = cv2.add(imgR, s2[None])
+
     # bayer_patter noise
     if opt.bayer_pattern:
         imgL = inject_bayer_pattern_noise(imgL, opt.bayer_pattern)
@@ -174,19 +182,9 @@ if __name__ == '__main__':
     import os
     from collections import namedtuple
 
-    opt = {}
-    opt['data_dir'] = 'M:/datasets/dexter/'
-    opt['train_file'] = './filenames/dexter_filenames.txt'
-    opt['batch_size'] = 1
-    opt['img_height'] = 384
-    opt['img_width'] = 512
-    opt['num_scales'] = 4
-    opt['bayer_pattern'] = 'GB'
-    opt['hue_delta'] = 0.08
-    opt['brightness_delta'] = 0.15
-    opt['contrast_scale'] = 2.0
-    Option = namedtuple('Option', opt.keys())
-    opt = Option(**opt)
+    opt.data_dir = 'M:/datasets/dexter/'
+    opt.train_file = './filenames/dexter_filenames.txt'
+    opt.batch_size = 1
 
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         element = batch_from_dataset()
