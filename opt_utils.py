@@ -22,10 +22,11 @@ flags.DEFINE_string('bayer_pattern', 'GB', 'bayer patterh noise injection during
 flags.DEFINE_float('hue_delta', 0.1, 'hue noise injection during training')
 flags.DEFINE_float('brightness_delta', 0.15, 'brightness noise injection during training')
 flags.DEFINE_float('contrast_scale', 3.0, 'contrast noise injection during training')
-flags.DEFINE_list('rgb_shift', [0.1, 0.1, 0.2], 'rgb shift during training')
+flags.DEFINE_list('rgb_shift', [0.05, 0.05, 0.2], 'rgb shift during training')
 flags.DEFINE_list('gamma_transform', [0.7, 1.5], 'adjust gamma during training')
 flags.DEFINE_integer('radial_blur', 5, 'max iteration count for radial blur during training')
 flags.DEFINE_float('zoomin_scale', 1.2, 'random zoomin during training')
+flags.DEFINE_float('elastic_distort', 8, 'elastic distort as pixel during training')
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')

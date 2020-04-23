@@ -3,6 +3,7 @@ import re
 import numpy as np
 import imgtool
 import cv2
+import functools
 from opt_utils import opt
 
 def inject_bayer_pattern_noise(img, pattern='GB'):
@@ -49,6 +50,17 @@ def radial_blur(img, iterations):
         zi = cv2.remap(img, zi_mapx, zi_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
         img = cv2.addWeighted(zo, 0.5, zi, 0.5, 0) # blend back to src
     return img
+
+def elastic_distorter(W, H, alpha):
+    sigma = int(64 * np.random.uniform(1.0, 2.0)) | 1
+    delta = cv2.GaussianBlur((np.random.rand(64, 64, 2).astype(np.float32) * 2 - 1), (sigma, sigma), 0)
+    scale = alpha / np.max(np.abs(delta))
+    delta = cv2.resize(scale * delta, (W,H))
+    dx, dy = cv2.split(delta)
+    x, y = np.meshgrid(np.arange(W), np.arange(H))
+    x, y = np.clip(x+dx, 0, W-1).astype(np.float32), np.clip(y+dy, 0, H-1).astype(np.float32)
+    return functools.partial(cv2.remap, map1=x, map2=y, 
+        interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     if isinstance(imgL_path, bytes):
@@ -117,6 +129,14 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
         imgR = cv2.warpAffine(imgR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
         dispL = sx * cv2.warpAffine(dispL, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
         dispR = sx * cv2.warpAffine(dispR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+
+    # elastic distortion
+    if opt.elastic_distort > 0.0:
+        alpha1, alpha2 = np.random.rand(2) * opt.elastic_distort
+        distortL = elastic_distorter(W, H, alpha1)
+        distortR = elastic_distorter(W, H, alpha2)
+        imgL, dispL = map(distortL, (imgL, dispL))
+        imgR, dispR = map(distortR, (imgR, dispR))
 
     # bayer_patter noise
     if opt.bayer_pattern:
