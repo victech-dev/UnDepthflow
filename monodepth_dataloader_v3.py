@@ -32,22 +32,51 @@ def inject_bayer_pattern_noise(img, pattern='GB'):
                     GR=cv2.COLOR_BayerGR2RGB, RG=cv2.COLOR_BayerRG2RGB)
     return cv2.cvtColor(bayer, cvt_code[pattern])
 
+def read_image(imgL_path, imgR_path):
+    if isinstance(imgL_path, bytes):
+        imgL_path = imgL_path.decode()
+    if isinstance(imgR_path, bytes):
+        imgR_path = imgR_path.decode()
 
-def read_image(image_path):
-    if isinstance(image_path, bytes):
-        image_path = image_path.decode()
-    img = imgtool.imread(image_path)
-    
-    # if image has 4 channels, we assume that this is RGBA png format
-    if img.shape[2] == 4:
-        img = img[:,:,:3]
-    
+    # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
+    imgL = cv2.cvtColor(cv2.imread(imgL_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    imgR = cv2.cvtColor(cv2.imread(imgR_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+
+    # noise in HLS space (hue, brightness, contrasts)
+    if opt.hue_delta > 0.0 or opt.brightness_delta > 0.0 or opt.contrast_scale > 1.0:
+        imgL_hls = cv2.cvtColor(imgL, cv2.COLOR_RGB2HLS)
+        imgR_hls = cv2.cvtColor(imgR, cv2.COLOR_RGB2HLS)
+        # apply hue noise
+        hmax = round(opt.hue_delta * 90)
+        h1 = np.random.randint(-hmax, hmax+1)
+        h2 = np.clip(np.random.randint(-hmax, hmax+1), h1-hmax, h1+hmax)
+        imgL_hls[:,:,0] = (imgL_hls[:,:,0].astype(np.int) + h1) % 180
+        imgR_hls[:,:,0] = (imgR_hls[:,:,0].astype(np.int) + h2) % 180
+        # apply brightness/contrast noise
+        alpha1 = np.random.uniform(1.0, opt.contrast_scale)
+        alpha2 = np.clip(alpha1 * np.random.uniform(0.75, 1.25), 1.0, opt.contrast_scale)
+        beta1 = np.random.uniform(0.0, opt.brightness_delta)
+        beta2 = np.clip(beta1 * np.random.uniform(0.75, 1.25), 0.0, opt.brightness_delta)
+        lumL, lumR = imgL_hls[:,:,1] / 255, imgR_hls[:,:,1] / 255
+        lum_meanL, lum_meanR = np.mean(lumL), np.mean(lumR)
+        lumL = alpha1 * (lumL - lum_meanL) + lum_meanL + beta1
+        lumR = alpha2 * (lumR - lum_meanR) + lum_meanR + beta2
+        imgL_hls[:,:,1] = np.clip(lumL * 255, 0, 255)
+        imgR_hls[:,:,1] = np.clip(lumR * 255, 0, 255)
+        imgL = cv2.cvtColor(imgL_hls, cv2.COLOR_HLS2RGB)
+        imgR = cv2.cvtColor(imgR_hls, cv2.COLOR_HLS2RGB)
+
     # bayer_patter noise
     if opt.bayer_pattern:
-        img = inject_bayer_pattern_noise(img, opt.bayer_pattern)
-    img = (img / 255).astype(np.float32)
-    img = cv2.resize(img, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    return img
+        imgL = inject_bayer_pattern_noise(imgL, opt.bayer_pattern)
+        imgR = inject_bayer_pattern_noise(imgR, opt.bayer_pattern)
+
+    imgL = (imgL / 255).astype(np.float32)
+    imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    imgR = (imgR / 255).astype(np.float32)
+    imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+
+    return imgL, imgR
 
 
 def read_disparity(disp_path):
@@ -115,29 +144,9 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        imgL = tf.py_func(read_image, [imgL_path], tf.float32)
-        imgR = tf.py_func(read_image, [imgR_path], tf.float32)
+        imgL, imgR = tf.py_func(read_image, [imgL_path, imgR_path], (tf.float32, tf.float32))
         dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
         dispR = tf.py_func(read_disparity, [dispR_path], tf.float32)
-
-        if opt.hue_delta > 0.0:
-            h1 = opt.hue_delta * tf.random.uniform([], -1.0, 1.0)
-            h2 = h1 * tf.random.uniform([], 0.9, 1.1)
-            imgL = tf.image.adjust_hue(imgL, h1)
-            imgR = tf.image.adjust_hue(imgR, h2)
-
-        if opt.brightness_delta > 0.0:
-            b1 = opt.brightness_delta * tf.random.uniform([], -1.0, 1.0)
-            b2 = b1 * tf.random.uniform([], 0.9, 1.1)
-            imgL = tf.image.adjust_brightness(imgL, b1)
-            imgR = tf.image.adjust_brightness(imgR, b2)
-        
-        if opt.contrast_scale > 1.0:
-            c1 = tf.random.uniform([], 1.0, opt.contrast_scale)
-            c2 = c1 * tf.random.uniform([], 0.9, 1.1)
-            imgL = tf.image.adjust_contrast(imgL, c1)
-            imgR = tf.image.adjust_contrast(imgR, c2)
-
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
