@@ -36,33 +36,40 @@ def radial_blur(img, iterations):
     if not hasattr(radial_blur, 'ZOOM_MAP'):
         h, w = img.shape[:2]
         cx, cy = (w-1) / 2, (h-1) / 2
-        zoomout_mapx, zoomout_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
-        zoomin_mapx, zoomin_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+        zo_mapx, zo_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+        zi_mapx, zi_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
         # 1 pixel offset for border of image
-        zoomout_mapx += (zoomout_mapx - cx) * (2/w) 
-        zoomout_mapy += (zoomout_mapy - cy) * (2/h)
-        zoomin_mapx -= (zoomin_mapx - cx) * (2/w)
-        zoomin_mapy -= (zoomin_mapy - cy) * (2/h)
-        radial_blur.ZOOM_MAP = (zoomout_mapx, zoomout_mapy, zoomin_mapx, zoomin_mapy)
+        zo_mapx += (zo_mapx - cx) * (2/w) 
+        zo_mapy += (zo_mapy - cy) * (2/h)
+        zi_mapx -= (zi_mapx - cx) * (2/w)
+        zi_mapy -= (zi_mapy - cy) * (2/h)
+        radial_blur.ZOOM_MAP = (zo_mapx, zo_mapy, zi_mapx, zi_mapy)
 
-    zoomout_mapx, zoomout_mapy, zoomin_mapx, zoomin_mapy = radial_blur.ZOOM_MAP
-    assert img.shape[:2] == zoomout_mapx.shape[:2]
+    zo_mapx, zo_mapy, zi_mapx, zi_mapy = radial_blur.ZOOM_MAP
+    assert img.shape[:2] == zo_mapx.shape[:2]
 
     for _ in range(iterations):    
-        zo = cv2.remap(img, zoomout_mapx, zoomout_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
-        zi = cv2.remap(img, zoomin_mapx, zoomin_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+        zo = cv2.remap(img, zo_mapx, zo_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+        zi = cv2.remap(img, zi_mapx, zi_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
         img = cv2.addWeighted(zo, 0.5, zi, 0.5, 0) # blend back to src
     return img
 
-def read_image(imgL_path, imgR_path):
+def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     if isinstance(imgL_path, bytes):
         imgL_path = imgL_path.decode()
     if isinstance(imgR_path, bytes):
         imgR_path = imgR_path.decode()
+    if isinstance(dispL_path, bytes):
+        dispL_path = dispL_path.decode()
+    if isinstance(dispR_path, bytes):
+        dispR_path = dispR_path.decode()
 
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
     imgL = cv2.cvtColor(cv2.imread(imgL_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
     imgR = cv2.cvtColor(cv2.imread(imgR_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    dispL = read_pfm(dispL_path)
+    dispR = read_pfm(dispR_path)
+    H, W = imgL.shape[:2]
 
     # noise in HLS space (hue, brightness, contrasts)
     if opt.hue_delta > 0.0 or opt.brightness_delta > 0.0 or opt.contrast_scale > 1.0:
@@ -115,19 +122,25 @@ def read_image(imgL_path, imgR_path):
         imgL = radial_blur(imgL, iterations)
         imgR = radial_blur(imgR, iterations)
 
+    # random zoom-in
+    if opt.zoomin_scale > 1.0:
+        sx, sy = np.random.uniform(1.0, opt.zoomin_scale, size=2)
+        tx = np.random.uniform(0.0, (W-1)*(sx-1))
+        ty = np.random.uniform(0.0, (H-1)*(sy-1))
+        warp = np.array([[sx, 0, -tx], [0, sy, -ty]], np.float32)
+        imgL = cv2.warpAffine(imgL, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+        imgR = cv2.warpAffine(imgR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+        dispL = sx * cv2.warpAffine(dispL, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+        dispR = sx * cv2.warpAffine(dispR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+
     imgL = (imgL / 255).astype(np.float32)
     imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     imgR = (imgR / 255).astype(np.float32)
     imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
 
-    return imgL, imgR
-
-
-def read_disparity(disp_path):
-    disp = read_pfm(disp_path)
-    disp = cv2.resize(disp, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    return np.atleast_3d(disp)
-
+    dispL = cv2.resize(dispL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    dispR = cv2.resize(dispR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    return imgL, imgR, np.atleast_3d(dispL), np.atleast_3d(dispR)
 
 def read_pfm(file):
     if isinstance(file, bytes):
@@ -188,9 +201,9 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        imgL, imgR = tf.py_func(read_image, [imgL_path, imgR_path], (tf.float32, tf.float32))
-        dispL = tf.py_func(read_disparity, [dispL_path], tf.float32)
-        dispR = tf.py_func(read_disparity, [dispR_path], tf.float32)
+        imgL, imgR, dispL, dispR = tf.py_func(read_image, 
+            [imgL_path, imgR_path, dispL_path, dispR_path], 
+            (tf.float32, tf.float32, tf.float32, tf.float32))
         return imgL, imgR, dispL, dispR
     ds = ds.map(_loaditems, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
