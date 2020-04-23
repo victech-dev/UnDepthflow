@@ -33,20 +33,16 @@ def inject_bayer_pattern_noise(img, pattern='GB'):
     return cv2.cvtColor(bayer, cvt_code[pattern])
 
 def radial_blur(img, iterations):
-    if not hasattr(radial_blur, 'ZOOM_MAP'):
-        h, w = img.shape[:2]
-        cx, cy = (w-1) / 2, (h-1) / 2
-        zo_mapx, zo_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
-        zi_mapx, zi_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
-        # 1 pixel offset for border of image
-        zo_mapx += (zo_mapx - cx) * (2/w) 
-        zo_mapy += (zo_mapy - cy) * (2/h)
-        zi_mapx -= (zi_mapx - cx) * (2/w)
-        zi_mapy -= (zi_mapy - cy) * (2/h)
-        radial_blur.ZOOM_MAP = (zo_mapx, zo_mapy, zi_mapx, zi_mapy)
-
-    zo_mapx, zo_mapy, zi_mapx, zi_mapy = radial_blur.ZOOM_MAP
-    assert img.shape[:2] == zo_mapx.shape[:2]
+    h, w = img.shape[:2]
+    cx, cy = (w-1) / 2, (h-1) / 2
+    cx = np.random.uniform(0.8 * cx, 1.2 * cx)
+    cy = np.random.uniform(0.8 * cy, 1.2 * cy)
+    zo_mapx, zo_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+    zi_mapx, zi_mapy = map(lambda x: x.astype(np.float32), np.meshgrid(range(w), range(h)))
+    zo_mapx += (zo_mapx - cx) * (2/w) # 1 pixel offset for border of image
+    zo_mapy += (zo_mapy - cy) * (2/h)
+    zi_mapx -= (zi_mapx - cx) * (2/w)
+    zi_mapy -= (zi_mapy - cy) * (2/h)
 
     for _ in range(iterations):    
         zo = cv2.remap(img, zo_mapx, zo_mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
@@ -111,17 +107,6 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
         imgL = cv2.LUT(imgL, table)
         imgR = cv2.LUT(imgR, table)
 
-    # bayer_patter noise
-    if opt.bayer_pattern:
-        imgL = inject_bayer_pattern_noise(imgL, opt.bayer_pattern)
-        imgR = inject_bayer_pattern_noise(imgR, opt.bayer_pattern)
-
-    # inject radial blur
-    if opt.radial_blur > 0:
-        iterations = np.random.randint(0, opt.radial_blur + 1)
-        imgL = radial_blur(imgL, iterations)
-        imgR = radial_blur(imgR, iterations)
-
     # random zoom-in
     if opt.zoomin_scale > 1.0:
         sx, sy = np.random.uniform(1.0, opt.zoomin_scale, size=2)
@@ -132,6 +117,17 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
         imgR = cv2.warpAffine(imgR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
         dispL = sx * cv2.warpAffine(dispL, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
         dispR = sx * cv2.warpAffine(dispR, warp, (W,H), borderMode=cv2.BORDER_REPLICATE)
+
+    # bayer_patter noise
+    if opt.bayer_pattern:
+        imgL = inject_bayer_pattern_noise(imgL, opt.bayer_pattern)
+        imgR = inject_bayer_pattern_noise(imgR, opt.bayer_pattern)
+
+    # inject radial blur
+    if opt.radial_blur > 0:
+        iterations = np.random.randint(0, opt.radial_blur + 1)
+        imgL = radial_blur(imgL, iterations)
+        imgR = radial_blur(imgR, iterations)
 
     imgL = (imgL / 255).astype(np.float32)
     imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
