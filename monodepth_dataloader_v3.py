@@ -6,6 +6,16 @@ import cv2
 import functools
 from opt_utils import opt
 
+def inject_strong_contrast(img, alpha):
+    ''' modified from https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv '''
+    brightness = (alpha ** 0.5) * 0.3
+    contrast = np.interp(alpha, [0, 1], [1.0, 3]) 
+    # hoho = np.mean(img) * (1 - brightness) + 255 * brightness
+    # print(hoho)
+    scale = (1 - brightness) * contrast
+    shift = 127 * (1 - contrast) + 255 * brightness * contrast
+    return cv2.addWeighted(img, scale, img, 0, shift)
+
 def inject_bayer_pattern_noise(img, pattern='GB'):
     h, w = img.shape[:2]
     gk = np.zeros([h,w], img.dtype)
@@ -79,30 +89,19 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     dispR = read_pfm(dispR_path)
     H, W = imgL.shape[:2]
 
-    # noise in HLS space (hue, brightness, contrasts)
-    if opt.hue_delta > 0.0 or opt.brightness_delta > 0.0 or opt.contrast_scale > 1.0:
-        imgL_hls = cv2.cvtColor(imgL, cv2.COLOR_RGB2HLS)
-        imgR_hls = cv2.cvtColor(imgR, cv2.COLOR_RGB2HLS)
+    # hue shift
+    if opt.hue_delta > 0.0:
+        imgL_hsv = cv2.cvtColor(imgL, cv2.COLOR_RGB2HSV)
+        imgR_hsv = cv2.cvtColor(imgR, cv2.COLOR_RGB2HSV)
         # apply hue noise
         hmax = round(opt.hue_delta * 90)
         h1 = np.random.randint(-hmax, hmax+1)
         h2 = np.clip(np.random.randint(-hmax, hmax+1), h1-hmax, h1+hmax)
-        imgL_hls[:,:,0] = (imgL_hls[:,:,0].astype(np.int) + h1) % 180
-        imgR_hls[:,:,0] = (imgR_hls[:,:,0].astype(np.int) + h2) % 180
-        # apply brightness/contrast noise
-        alpha1 = np.random.uniform(1.0, opt.contrast_scale)
-        alpha2 = np.clip(alpha1 * np.random.uniform(0.75, 1.25), 1.0, opt.contrast_scale)
-        beta1 = np.random.uniform(0.0, opt.brightness_delta)
-        beta2 = np.clip(beta1 * np.random.uniform(0.75, 1.25), 0.0, opt.brightness_delta)
-        lumL, lumR = imgL_hls[:,:,1] / 255, imgR_hls[:,:,1] / 255
-        lum_meanL, lum_meanR = np.mean(lumL), np.mean(lumR)
-        lumL = alpha1 * (lumL - lum_meanL) + lum_meanL + beta1
-        lumR = alpha2 * (lumR - lum_meanR) + lum_meanR + beta2
-        imgL_hls[:,:,1] = np.clip(lumL * 255, 0, 255)
-        imgR_hls[:,:,1] = np.clip(lumR * 255, 0, 255)
-        imgL = cv2.cvtColor(imgL_hls, cv2.COLOR_HLS2RGB)
-        imgR = cv2.cvtColor(imgR_hls, cv2.COLOR_HLS2RGB)
-
+        imgL_hsv[:,:,0] = (imgL_hsv[:,:,0].astype(np.int) + h1) % 180
+        imgR_hsv[:,:,0] = (imgR_hsv[:,:,0].astype(np.int) + h2) % 180
+        imgL = cv2.cvtColor(imgL_hsv, cv2.COLOR_HSV2RGB)
+        imgR = cv2.cvtColor(imgR_hsv, cv2.COLOR_HSV2RGB)
+    
     # rgb shift
     if isinstance(opt.rgb_shift, (list,tuple)) and len(opt.rgb_shift) == 3:
         smax = np.array(opt.rgb_shift, np.float) * 255
@@ -110,6 +109,13 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
         s2 = np.clip(np.random.uniform(-smax, smax), s1-smax, s1+smax)
         imgL = cv2.add(imgL, s1[None])
         imgR = cv2.add(imgR, s2[None])
+
+    # apply strong contrast
+    if opt.strong_contrast:
+        alpha1 = np.random.uniform(0.0, 1.0)
+        alpha2 = np.clip(alpha1 * np.random.uniform(0.9, 1.1), 0.0, 1.0)
+        imgL = inject_strong_contrast(imgL, alpha1)
+        imgR = inject_strong_contrast(imgR, alpha2)
 
     # gamma transform
     if isinstance(opt.gamma_transform, (list,tuple)) and len(opt.gamma_transform) == 2:
