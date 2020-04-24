@@ -10,8 +10,6 @@ def inject_strong_contrast(img, alpha):
     ''' modified from https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv '''
     brightness = (alpha ** 0.5) * 0.3
     contrast = np.interp(alpha, [0, 1], [1.0, 3]) 
-    # hoho = np.mean(img) * (1 - brightness) + 255 * brightness
-    # print(hoho)
     scale = (1 - brightness) * contrast
     shift = 127 * (1 - contrast) + 255 * brightness * contrast
     return cv2.addWeighted(img, scale, img, 0, shift)
