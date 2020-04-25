@@ -2,6 +2,7 @@ import numpy as np
 import open3d as o3d
 from pathlib import Path
 import functools
+import cv2
 
 def _create_axis_bar():
     LEN, DIV, RADIUS = 20, 1, 0.02
@@ -69,6 +70,13 @@ class NavScene(object):
         self.pcd.points = o3d.utility.Vector3dVector(xyz)
         self.pcd.colors = o3d.utility.Vector3dVector(rgb)
         self.vis.update_geometry(self.pcd)
+
+        from imgtool import imshow
+        depth2 = cv2.normalize(depth, None, 0, 1, cv2.NORM_MINMAX)
+        depth2 = cv2.convertScaleAbs(depth2, alpha=255)
+        show = np.concatenate([img, img], axis=0)
+        show[img.shape[0]:,:] = np.atleast_3d(depth2)
+        imshow(show, wait=False, norm=False)
 
     def run(self):
         self.vis.run()
