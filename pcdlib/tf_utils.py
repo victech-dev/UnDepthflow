@@ -22,7 +22,9 @@ def tf_detect_plane_xz(xyz):
     S = tf.reshape(S_4d, tf.concat([tf.shape(S_4d)[:-1], [3, 3]], 0))
     sigma = S - P[:,:,:,:,None] @ P[:,:,:,None,:]
 
-    ''' eigenvalue solver of 3x3 symmetric matrix: faster than tf.linalg.eigh '''
+    # eigenvalue solver of 3x3 symmetric matrix
+    # much faster than tf.linalg.eigh when input is multiplematrices
+    # https://www.geometrictools.com/Documentation/RobustEigenSymmetric3x3.pdf
     A = sigma
     A_max = tf.reduce_max(tf.abs(A), axis=(-2,-1))
     eval_zero = tf.cast(A_max < 1e-6, tf.float32)
@@ -50,18 +52,20 @@ def tf_detect_plane_xz(xyz):
     beta1 = -(beta0 + beta2)
     betas = tf.stack([beta0, beta1, beta2], axis=-1)
 
-    # eval0 <= eval1 <= eval2
-    # Merge 3 cases: all zeros, triple roots, ordinal case.
+    # Merge 3 cases: all zeros, triple roots, ordinal case. (eval0 <= eval1 <= eval2)
     # Note this actually should be rescaled to initial values (eig *= A_max), 
     # but we are interesting in eigenvector, so let's just skip it. 
     evals = q[...,None] + p[...,None] * betas
     evals = (eig_triple * q)[...,None] + ((1.0 - eval_zero) * (1.0 - eig_triple))[...,None] * evals
     eval0, eval1, eval2 = tf.unstack(evals, axis=-1)
 
-    # y-magnitude of eigenvector which has the smallest eigenvalue 
+    # Calculate y-magnitude of eigenvector which has the smallest eigenvalue 
     # (= y-magnitude of normal vector from local pcd)
-    denom = (eval0 - eval1) * (eval0 - eval2)
+    # by using eigenvector-eigenvalue identity from https://arxiv.org/pdf/1908.03795.pdf
+    denom2 = (eval0 - eval1) * (eval0 - eval2)
+    denom = tf.sqrt(tf.maximum(denom2, 0))
     evec_zero = tf.cast(denom < 1e-6, tf.float32)
     ny2_num = eval0**2 - (a00 + a22) * eval0 + (a00 * a22 - a02**2)
-    ny2 = tf.clip_by_value(ny2_num / tf.maximum(denom, 1e-6), 0, 1)
-    return (1.0 - evec_zero) * tf.sqrt(ny2)
+    ny_num = tf.sqrt(tf.maximum(ny2_num, 0))
+    ny = tf.clip_by_value(ny_num / tf.maximum(denom, 1e-6), 0, 1)
+    return (1.0 - evec_zero) * ny
