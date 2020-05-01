@@ -5,6 +5,7 @@ import imgtool
 import cv2
 import functools
 from opt_utils import opt
+from misc import read_pfm
 
 def inject_strong_contrast(img, alpha):
     ''' modified from https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv '''
@@ -83,8 +84,8 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
     imgL = cv2.cvtColor(cv2.imread(imgL_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
     imgR = cv2.cvtColor(cv2.imread(imgR_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    dispL = read_pfm(dispL_path)
-    dispR = read_pfm(dispR_path)
+    dispL, _ = read_pfm(dispL_path)
+    dispR, _ = read_pfm(dispR_path)
     H, W = imgL.shape[:2]
 
     # hue shift
@@ -161,46 +162,6 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     dispL = cv2.resize(dispL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     dispR = cv2.resize(dispR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     return imgL, imgR, np.atleast_3d(dispL), np.atleast_3d(dispR)
-
-def read_pfm(file):
-    if isinstance(file, bytes):
-        file = file.decode()
-    file = open(file, 'rb')
-
-    color = None
-    width = None
-    height = None
-    scale = None
-    endian = None
-
-    header = file.readline().rstrip().decode('utf-8')
-    if header == 'PF':
-        color = True
-    elif header == 'Pf':
-        color = False
-    else:
-        raise Exception('Not a PFM file.')
-
-    dim_match = re.match(r'^(\d+)\s(\d+)\s$', file.readline().decode('utf-8'))
-    if dim_match:
-        width, height = list(map(int, dim_match.groups()))
-    else:
-        raise Exception('Malformed PFM header.')
-
-    scale = float(file.readline().rstrip().decode('utf-8'))
-    if scale < 0: # little-endian
-        endian = '<'
-        scale = -scale
-    else:
-        endian = '>' # big-endian
-
-    data = np.fromfile(file, endian + 'f')
-    shape = (height, width, 3) if color else (height, width)
-
-    data = np.reshape(data, shape)
-    data = np.flipud(data)
-    #return data, scale
-    return data.astype(np.float32)
 
 def batch_from_dataset():
     ds = tf.data.TextLineDataset(opt.train_file)

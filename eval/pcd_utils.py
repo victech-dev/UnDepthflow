@@ -27,7 +27,7 @@ COORD_FRAMES = _create_axis_bar()
 def populate_pcd(img, depth, K):
     H, W = img.shape[:2]
     py, px = np.mgrid[:H,:W]
-    xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.expand_dims(depth, axis=-1)
+    xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.atleast_3d(depth)
     xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
     rgb = np.reshape(img, (-1, 3)) / 255.0
     # remove 0-depth area
@@ -71,12 +71,12 @@ class NavScene(object):
         self.pcd.colors = o3d.utility.Vector3dVector(rgb)
         self.vis.update_geometry(self.pcd)
 
-        from imgtool import imshow
-        depth2 = cv2.normalize(depth, None, 0, 1, cv2.NORM_MINMAX)
-        depth2 = cv2.convertScaleAbs(depth2, alpha=255)
-        show = np.concatenate([img, img], axis=0)
-        show[img.shape[0]:,:] = np.atleast_3d(depth2)
-        imshow(show, wait=False, norm=False)
+        # from imgtool import imshow
+        # depth2 = cv2.normalize(depth, None, 0, 1, cv2.NORM_MINMAX)
+        # depth2 = cv2.convertScaleAbs(depth2, alpha=255)
+        # show = np.concatenate([img, img], axis=0)
+        # show[img.shape[0]:,:] = np.atleast_3d(depth2)
+        # imshow(show, wait=False, norm=False)
 
     def run(self):
         self.vis.run()

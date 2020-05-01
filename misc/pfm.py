@@ -42,6 +42,8 @@ def read_pfm(file):
     return data.astype(np.float32), scale
 
 def write_pfm(file, image, scale=1):
+    if isinstance(file, bytes):
+        file = file.decode()
     file = open(file, 'wb')
 
     color = None
