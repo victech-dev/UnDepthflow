@@ -3,7 +3,7 @@ import open3d as o3d
 from pathlib import Path
 import functools
 import cv2
-from pcd_utils.core import COORD_FRAMES, populate_pcd
+from pcdlib.utils import COORD_FRAMES, populate_pcd
 
 class NavScene(object):
     def __init__(self, feeder):

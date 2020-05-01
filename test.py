@@ -7,23 +7,20 @@ import cv2
 import open3d as o3d
 from pathlib import Path
 import re
-from utils import write_pfm
+from misc import write_pfm, query_K, rescale_K
 from tqdm import tqdm
+import time
 
 from opt_utils import opt, autoflags
+from pcdlib import NavScene
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
 from eval.test_model import TestModel
-from eval.pcd_utils import NavScene
 
 def predict_disp(sess, model, imgnameL, imgnameR):
-    imgL = imgtool.imread(imgnameL)
-    if imgL.shape[2] == 4: 
-        imgL = imgL[:,:,:3]
-    imgR = imgtool.imread(imgnameR)
-    if imgR.shape[2] == 4: 
-        imgR = imgR[:,:,:3]
+    imgL = imgtool.imread(imgnameL, mode='RGB')
+    imgR = imgtool.imread(imgnameR, mode='RGB')
 
     # denoising?
     # imgL = cv2.blur(imgL, ksize=(3,3))
@@ -36,6 +33,7 @@ def predict_disp(sess, model, imgnameL, imgnameR):
     # session run
     imgL_fit = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     imgR_fit = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+
     pred_disp = sess.run(model.pred_disp, 
         feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None]})
     pred_disp = np.squeeze(pred_disp) # [1, h, w, 1] => [h, w]
@@ -44,36 +42,43 @@ def predict_disp(sess, model, imgnameL, imgnameR):
     pred_disp = width * cv2.resize(pred_disp, (width, height))
     return imgL, pred_disp
 
-def predict_depth_vicimg(sess, model, imgnameL, imgnameR):
-    imgL, disp = predict_disp(sess, model, imgnameL, imgnameR)
 
-    # from dexter
-    # K = [320.0, 0.0, 320.0, 0.0, 320.0, 240.0, 0, 0, 1]
-    # K = np.array(K).reshape(3,3)
-    # fxb = 320.0 * 0.25 # baseline???
+def predict_depth(sess, model, imgnameL, imgnameR, cat):
+    imgL = imgtool.imread(imgnameL, mode='RGB')
+    imgR = imgtool.imread(imgnameR, mode='RGB')
 
-    # WITHROBOT stereo camera
-    # K = [9.5061071654182354e+02, 0.0, 5.8985625846591154e+02, 0.0, 9.5061071654182354e+02, 3.9634126783635918e+02, 0, 0, 1]
-    # K = np.array(K).reshape(3,3)
-    # fxb = 9.5061071654182354e+02 / 8.2988120552523057 # Q[3,4]/Q[4,3]    
+    # session run
+    imgL_fit = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    imgR_fit = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+    K, baseline = query_K(cat)
+    K_fit = rescale_K(K, imgL.shape[-2::-1], imgL_fit.shape[-2::-1])
+    baseline = np.array(baseline, np.float32)
 
-    # K = [[988.49625876, 0.0, 556.62020874], [0.0, 988.49625876, 331.60751724], [0.0, 0.0, 1.0]]
-    # K = np.array(K, np.float32)
-    # fxb = 119.98508217 # Q[3,4]/Q[4,3] or abs(P2[1,4])
+    t0 = time.time()
+    pred_disp, pred_normal = sess.run([model.pred_disp, model.pred_normal], 
+        feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
+            model.input_K: K_fit[None], model.input_baseline: baseline[None]})
+    t1 = time.time()
+    print("* elspaed:", t1 - t0)
+    pred_disp = np.squeeze(pred_disp) # [1, h, w, 1] => [h, w]
 
-    K = [[965.00845177, 0.0, 553.37428834], [0.0, 965.00845177, 388.14919283], [0.0, 0.0, 1.0]]
-    K = np.array(K, np.float32)
-    fxb = 118.12107953 # Q[3,4]/Q[4,3] or abs(P2[1,4])
+    height, width = imgL.shape[:2] # original height, width
+    pred_disp = width * cv2.resize(pred_disp, (width, height))
+    depth = K[0,0] * baseline / pred_disp
 
-    depth = fxb / disp
+    floor = pred_normal[0]
+    print(floor.min(), floor.max())
+    ######floor = np.clip(np.nan_to_num(floor), 0, 1)
+    ######print(floor[50:60,50:60,0])
+    imgtool.imshow(floor, wait=False)
+
     return imgL, depth, K
-
 
 def main(unused_argv):
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
     opt.mode = 'stereosv'
-    opt.pretrained_model = '.results_stereosv/model-450003'
+    opt.pretrained_model = '.results_stereosv/model-log'
     Model, Model_eval = autoflags()
 
     with tf.Graph().as_default(), tf.device('/gpu:0'):
@@ -86,6 +91,11 @@ def main(unused_argv):
             with tf.name_scope("test_model"):
                 _ = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
                 model = Model_eval(scope=vs)
+
+        # count weights
+        var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        sizes = [np.prod(v.shape.as_list()) for v in var_list]
+        print("*** Total weight count:", np.sum(sizes))
 
         # Create a saver.
         saver = tf.train.Saver(max_to_keep=10)
@@ -107,7 +117,7 @@ def main(unused_argv):
         def ns_feeder(index):
             imgnameL = imgnamesL[index % len(imgnamesL)]
             imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-            img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+            img, depth, K = predict_depth(sess, model, str(imgnameL), str(imgnameR), cat='victech')
             return img, np.clip(depth, 0, 30), K
 
         ''' generate disparity map prediction '''
@@ -136,7 +146,7 @@ def main(unused_argv):
         # def ns_feeder(index):
         #     imgnameL = imgnamesL[index % len(imgnamesL)]
         #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        #     img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
+        #     img, depth, K = predict_depth(sess, model, str(imgnameL), str(imgnameR), cat='dexter')
         #     return img, np.clip(depth, 0, 30), K
 
         ''' point cloud test of RealSense data '''
