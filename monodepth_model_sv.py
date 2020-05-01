@@ -8,6 +8,7 @@ from opt_utils import opt
 from nets.pwc_disp import pwc_disp, feature_pyramid_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
 from loss_utils import charbonnier_loss
+from pcd_utils import tf_populate_pcd
 
 class MonodepthModel(object):
     """monodepth model"""
@@ -198,16 +199,11 @@ class Model_eval_stereosv(object):
         # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
         K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
         K1 = K_scale[None,:,:] @ K0
-        K1_inv = tf.linalg.inv(K1)
 
         # construct point cloud
         fxb = K1[:,0,0] * baseline
         depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
-
-        px, py = tf.meshgrid(tf.range(w1), tf.range(h1))
-        px, py = tf.cast(px, tf.float32), tf.cast(py, tf.float32)
-        xyz = tf.stack([px, py, tf.ones_like(px)], axis=-1)[None] * depth
-        xyz = tf.squeeze(K1_inv[:,None,None,:,:] @ xyz[:,:,:,:,None], axis=-1) # [b, H, W, 3]
+        xyz = tf_populate_pcd(depth, K1)
 
         # valid padding: shape of sigma = [b, H-ksize+1, W-ksize+1, 3, 3]
         ksize = 5
