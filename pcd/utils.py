@@ -3,7 +3,6 @@ import open3d as o3d
 from pathlib import Path
 import functools
 import cv2
-import tensorflow as tf
 
 def _create_axis_bar():
     LEN, DIV, RADIUS = 20, 1, 0.02
@@ -44,15 +43,3 @@ def show_pcd(img, depth, K):
     o3d.visualization.draw_geometries([pcd] + COORD_FRAMES)
 
 
-def tf_populate_pcd(depth, K):
-    K_inv = tf.linalg.inv(K)
-    _, H, W, _ = tf.unstack(tf.shape(depth))
-    px, py = tf.meshgrid(tf.range(W), tf.range(H))
-    px, py = tf.cast(px, tf.float32), tf.cast(py, tf.float32)
-    xyz = tf.stack([px, py, tf.ones_like(px)], axis=-1)[None] * depth
-    xyz = tf.squeeze(K_inv[:,None,None,:,:] @ xyz[:,:,:,:,None], axis=-1) # [b, H, W, 3]
-    return xyz
-
-
-def tf_detect_plane_xz(xyz):
-    pass
