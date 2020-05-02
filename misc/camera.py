@@ -9,7 +9,7 @@ def query_K(cat):
         baseline = 0.120601 # abs(P2[1,4]) / Q[3,4]
     elif cat == 'dexter':
         f = 320
-        cx, cy = 320, 240
+        cx, cy = (640-1)/2, (480-1)/2
         baseline = 0.12
     else:
         raise RuntimeError('Not supported dataset category')
@@ -23,5 +23,18 @@ def rescale_K(K, size0, size1):
     rx, ry = w1 / w0, h1 / h0
     K_scale = np.array([[rx, 0, 0.5*(rx-1)], [0, ry, 0.5*(ry-1)], [0, 0, 1]], dtype=np.float32)
     return K_scale @ K
+
+
+def resize_image_pairs(imgL, imgR, new_size, K=None):
+    h0, w0 = imgL.shape[:2]
+    w1, _ = new_size
+    interp = cv2.INTER_AREA if w0 > w1 else cv2.INTER_LINEAR
+    imgL = cv2.resize(imgL, new_size, interpolation=interp)
+    imgR = cv2.resize(imgR, new_size, interpolation=interp)
+    if K is None:
+        return imgL, imgR
+    else:
+        return imgL, imgR, rescale_K(K, (w0, h0), new_size)
+
 
 

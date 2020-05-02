@@ -15,10 +15,10 @@ def tf_populate_pcd(depth, K):
 def tf_detect_plane_xz(xyz):
     # valid padding: shape of sigma = [b, H-ksize+1, W-ksize+1, 3, 3]
     ksize = 5
-    P = tf.nn.avg_pool(xyz, ksize, 1, 'VALID')
+    P = tf.nn.avg_pool2d(xyz, ksize, 1, 'SAME')
     xyz2 = xyz[:,:,:,:,None] @ xyz[:,:,:,None,:]
     xyz2_4d = tf.reshape(xyz2, tf.concat([tf.shape(xyz2)[:-2], [9]], 0))
-    S_4d = tf.nn.avg_pool(xyz2_4d, ksize, 1, 'VALID')
+    S_4d = tf.nn.avg_pool2d(xyz2_4d, ksize, 1, 'SAME')
     S = tf.reshape(S_4d, tf.concat([tf.shape(S_4d)[:-1], [3, 3]], 0))
     sigma = S - P[:,:,:,:,None] @ P[:,:,:,None,:]
 

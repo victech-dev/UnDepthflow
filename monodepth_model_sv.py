@@ -131,7 +131,7 @@ class Model_eval_stereosv(object):
 
             model = MonodepthModel('test', input_L, input_R, featureL_disp, featureR_disp, None, None)
             pred_disp = [model.disp1, model.disp2, model.disp3, model.disp4]
-            pred_normal = self.build_normal_map(model.disp_pyr[:, :, :, 0:1], K, baseline)
+            pred_tmap = self.build_traversability_map(model.disp_pyr[:, :, :, 0:1], K, baseline)
 
         self.input_L = input_uint8_L
         self.input_R = input_uint8_R
@@ -139,10 +139,10 @@ class Model_eval_stereosv(object):
         self.input_baseline = baseline
 
         self.pred_disp = pred_disp[0][:, :, :, 0:1]
-        self.pred_normal = pred_normal
+        self.pred_tmap = pred_tmap
 
 
-    def build_normal_map(self, disp, K0, baseline):
+    def build_traversability_map(self, disp, K0, baseline):
         '''
         disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
         K0: rescaled already from original size to [opt.img_width, opt.img_height]
@@ -150,9 +150,6 @@ class Model_eval_stereosv(object):
         _, h1, w1, _ = tf.unstack(tf.shape(disp))
         rw = tf.cast(w1, tf.float32) / opt.img_width
         rh = tf.cast(h1, tf.float32) / opt.img_height
-
-        #DEBUG!!!! K 의 rescale 을 사실은 original image size 에 대해서 해야하는데..
-        #DEBUG!!!! 최종 return 되는 normal 에 padding 이 껴있어야하는데...
 
         # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
         K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
@@ -162,8 +159,11 @@ class Model_eval_stereosv(object):
         fxb = K1[:,0,0] * baseline
         depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
         xyz = tf_populate_pcd(depth, K1)
-
-        # plane XZ detection
         plane_xz = tf_detect_plane_xz(xyz)
-        return plane_xz
+
+        # Condition 1: thresh below under camera
+        cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+        # Condition 2: y component of normal vector
+        cond2 = tf.cast(plane_xz > 0.85, tf.float32)
+        return cond1 * cond2
 

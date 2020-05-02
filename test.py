@@ -7,7 +7,7 @@ import cv2
 import open3d as o3d
 from pathlib import Path
 import re
-from misc import write_pfm, query_K, rescale_K
+from misc import write_pfm, query_K, resize_image_pairs
 from tqdm import tqdm
 import time
 
@@ -46,16 +46,15 @@ def predict_disp(sess, model, imgnameL, imgnameR):
 def predict_depth(sess, model, imgnameL, imgnameR, cat):
     imgL = imgtool.imread(imgnameL, mode='RGB')
     imgR = imgtool.imread(imgnameR, mode='RGB')
-
-    # session run
-    imgL_fit = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    imgR_fit = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     K, baseline = query_K(cat)
-    K_fit = rescale_K(K, imgL.shape[-2::-1], imgL_fit.shape[-2::-1])
+
+    # rescale to fit nn-input
+    imgL_fit, imgR_fit, K_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), K=K)
     baseline = np.array(baseline, np.float32)
 
+    # session run
     t0 = time.time()
-    pred_disp, pred_normal = sess.run([model.pred_disp, model.pred_normal], 
+    pred_disp, pred_tmap = sess.run([model.pred_disp, model.pred_tmap], 
         feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
             model.input_K: K_fit[None], model.input_baseline: baseline[None]})
     t1 = time.time()
@@ -66,11 +65,12 @@ def predict_depth(sess, model, imgnameL, imgnameR, cat):
     pred_disp = width * cv2.resize(pred_disp, (width, height))
     depth = K[0,0] * baseline / pred_disp
 
-    floor = pred_normal[0]
-    print(floor.min(), floor.max())
-    ######floor = np.clip(np.nan_to_num(floor), 0, 1)
-    ######print(floor[50:60,50:60,0])
-    imgtool.imshow(floor, wait=False)
+    tmap = cv2.resize(pred_tmap[0], (640, 480), interpolation=cv2.INTER_LINEAR)
+    green = np.zeros((480, 640, 3), np.uint8)
+    green[:,:,1] = 255
+    green = cv2.addWeighted(green, 0.5, imgL, 0.5, 0.0)
+    imgL[tmap > 0.5] = green[tmap > 0.5]
+    imgtool.imshow(imgL, wait=False)
 
     return imgL, depth, K
 
@@ -81,7 +81,7 @@ def main(unused_argv):
     opt.pretrained_model = '.results_stereosv/model-log'
     Model, Model_eval = autoflags()
 
-    with tf.Graph().as_default(), tf.device('/gpu:0'):
+    with tf.device('/gpu:0'), tf.Graph().as_default():
         print('Constructing models and inputs.')
         imageL = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_L')
         imageR = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_R')
@@ -102,9 +102,10 @@ def main(unused_argv):
 
         # Make training session.
         config = tf.ConfigProto()
-        config.allow_soft_placement = True
-        config.log_device_placement = False
+        #config.allow_soft_placement = True
+        #config.log_device_placement = False
         config.gpu_options.allow_growth = True
+        #config.gpu_options.per_process_gpu_memory_fraction=0.6
         sess = tf.Session(config=config)
 
         sess.run(tf.global_variables_initializer())
