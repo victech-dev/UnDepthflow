@@ -4,6 +4,7 @@ from pathlib import Path
 import functools
 import cv2
 from pcdlib.utils import COORD_FRAMES, populate_pcd
+from scipy.spatial.transform import Rotation as R
 
 class NavScene(object):
     def __init__(self, feeder):
@@ -15,6 +16,17 @@ class NavScene(object):
             self.vis.add_geometry(geo)
         self.pcd = o3d.geometry.PointCloud()
         self.vis.add_geometry(self.pcd)
+
+        # set camera pose properly
+        vc = self.vis.get_view_control()
+        cam_params = vc.convert_to_pinhole_camera_parameters()
+        new_extrinsic = np.copy(cam_params.extrinsic)
+        new_extrinsic[:3,:3] = R.from_euler('x', 10, degrees=True).as_matrix()
+        new_extrinsic[:3,3] = [0, 0.3, 0]
+        new_cam_params = o3d.camera.PinholeCameraParameters()
+        new_cam_params.intrinsic = cam_params.intrinsic
+        new_cam_params.extrinsic = new_extrinsic
+        vc.convert_from_pinhole_camera_parameters(new_cam_params)
 
         self.feeder = feeder
         self.index = 0

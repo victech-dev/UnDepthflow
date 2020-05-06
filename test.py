@@ -7,16 +7,54 @@ import cv2
 import open3d as o3d
 from pathlib import Path
 import re
-from misc import write_pfm, query_K, resize_image_pairs
 from tqdm import tqdm
 import time
 
 from opt_utils import opt, autoflags
 from pcdlib import NavScene
+from misc import write_pfm, query_K, rescale_K, resize_image_pairs, warp_topdown
+
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
 from eval.test_model import TestModel
+
+
+def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
+    Hs, Ws = tmap.shape[:2]
+    Wd, Hd = (int(search_range[0] * ppm), int(search_range[1] * ppm))
+    xc, y1 = 0.5*(Ws-1), Hs-1 # bottom center coord of tmap
+    x0 = xc - 0.5 * search_range[0] * ppm # left
+    x1 = xc + 0.5 * search_range[0] * ppm # right
+    y0 = y1 - search_range[1] * ppm # top
+    src_pts = np.float32([[x0, y0], [x0, y1], [x1, y1]])
+
+    ksize = int(passage_width * ppm)
+    kernel_1d = np.sin(np.linspace(0, np.pi, ksize))
+
+    max_passage = -1
+    max_passage_track = (0, 0)
+    for angle in np.linspace(-max_angle, max_angle, 30):
+        rot = np.deg2rad(angle)
+        dst_pts = np.float32([[(Hd-1)*np.tan(rot),0], [0,Hd-1], [Wd-1, Hd-1]])
+        tfm = cv2.getAffineTransform(src_pts, dst_pts)
+        w = cv2.warpAffine(tmap, tfm, (Wd, Hd))
+        w_1d = np.sum(w, axis=0) # [H,W] => [W]
+        est_passage = np.correlate(w_1d, kernel_1d, mode='valid')
+        max_idx = np.argmax(est_passage)
+        if est_passage[max_idx] > max_passage:
+            max_passage = est_passage[max_idx]
+            max_passage_track = ((max_idx - 0.5 * (Wd-ksize)) / ppm, angle)
+
+    # display guide
+    offset, angle = max_passage_track
+    row0, col0 = y1, xc + offset*ppm
+    row1, col1 = y0, xc + offset*ppm + (Hd-1) * np.tan(-np.deg2rad(angle))
+    guide = cv2.cvtColor(cv2.convertScaleAbs(tmap, alpha=255), cv2.COLOR_GRAY2RGB)
+    cv2.line(guide, (int(col0), int(row0)), (int(col1), int(row1)), (0,255,0), thickness=3)            
+    imgtool.imshow(guide, wait=False)
+    print(max_passage, max_passage_track)
+
 
 def predict_disp(sess, model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL, mode='RGB')
@@ -58,21 +96,27 @@ def predict_depth(sess, model, imgnameL, imgnameR, cat):
         feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
             model.input_K: K_fit[None], model.input_baseline: baseline[None]})
     t1 = time.time()
-    print("* elspaed:", t1 - t0)
     pred_disp = np.squeeze(pred_disp) # [1, h, w, 1] => [h, w]
 
     height, width = imgL.shape[:2] # original height, width
     pred_disp = width * cv2.resize(pred_disp, (width, height))
     depth = K[0,0] * baseline / pred_disp
 
-    tmap = cv2.resize(pred_tmap[0], (640, 480), interpolation=cv2.INTER_LINEAR)
+    tmap = pred_tmap[0]
+    K_tmap = rescale_K(K, (640, 480), (tmap.shape[1], tmap.shape[0]))    
+    topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
+    find_passage(topdown, max_angle=30)
+    print("* elspaed:", t1 - t0)
+
+    # mark traversability to pcd image
+    img_to_show = np.copy(imgL)
+    tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
     green = np.zeros((480, 640, 3), np.uint8)
     green[:,:,1] = 255
-    green = cv2.addWeighted(green, 0.5, imgL, 0.5, 0.0)
-    imgL[tmap > 0.5] = green[tmap > 0.5]
-    imgtool.imshow(imgL, wait=False)
+    green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
+    img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
 
-    return imgL, depth, K
+    return img_to_show, depth, K
 
 def main(unused_argv):
     opt.trace = '' # this should be empty because we have no output when testing

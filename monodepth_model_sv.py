@@ -161,7 +161,7 @@ class Model_eval_stereosv(object):
         xyz = tf_populate_pcd(depth, K1)
         plane_xz = tf_detect_plane_xz(xyz)
 
-        # Condition 1: thresh below under camera
+        # Condition 1: thresh below camera
         cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
         # Condition 2: y component of normal vector
         cond2 = tf.cast(plane_xz > 0.85, tf.float32)

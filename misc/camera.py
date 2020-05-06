@@ -37,4 +37,29 @@ def resize_image_pairs(imgL, imgR, new_size, K=None):
         return imgL, imgR, rescale_K(K, (w0, h0), new_size)
 
 
+def warp_topdown(img, K, elevation, fov=5, ppm=20):
+    '''
+    img: image to warp
+    K: camera intrinsic
+    elevation: elevation of floor w.r.t the camera (= camera height from floor)
+    fov: field of view as meter
+    ppm: pixel per meter, new image size = (2* fov * ppm, fov * ppm)
+    '''
+    fy, cy = K[1,1], K[1,2]
+    z_front = fy * elevation / (img.shape[0] - cy)
+    src = np.zeros((4, 3), np.float32)
+    
+    src[0] = [-fov, elevation, z_front+fov]
+    src[1] = [fov, elevation, z_front+fov]
+    src[2] = [-fov, elevation, z_front]
+    src[3] = [fov, elevation, z_front]
+    src = src @ K.T
+    src /= src[:,2:]
+    
+    H,W = int(fov * ppm), int(2 * fov * ppm)
+    dst = np.array([[0, 0], [W-1, 0], [0, H-1], [W-1, H-1]], np.float32)
+    tfm = cv2.getPerspectiveTransform(src[:,None,:-1], dst[:,None,:])
+    return cv2.warpPerspective(img, tfm, (W,H))
+
+
 
