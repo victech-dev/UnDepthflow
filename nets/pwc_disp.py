@@ -13,37 +13,32 @@
 # limitations under the License.
 # ==============================================================================
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
+from tensorflow.layers import Conv2D
 import functools
 
 from opt_utils import opt
 from core_warp import inv_warp_flow
 
-
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
+_l2 = tf.keras.regularizers.l2(opt.weight_decay)
+_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_initializer='glorot_normal', kernel_regularizer=_l2)
+
 
 def feature_pyramid_disp(image, reuse):
-    with tf.variable_scope('feature_net_disp'):
-        with slim.arg_scope(
-            [slim.conv2d, slim.conv2d_transpose],
-                weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-                activation_fn=_leaky_relu,
-                variables_collections=["flownet"],
-                reuse=reuse):
-            cnv1 = slim.conv2d(image, 16, [3, 3], stride=2, scope="cnv1")
-            cnv2 = slim.conv2d(cnv1, 16, [3, 3], stride=1, scope="cnv2")
-            cnv3 = slim.conv2d(cnv2, 32, [3, 3], stride=2, scope="cnv3")
-            cnv4 = slim.conv2d(cnv3, 32, [3, 3], stride=1, scope="cnv4")
-            cnv5 = slim.conv2d(cnv4, 64, [3, 3], stride=2, scope="cnv5")
-            cnv6 = slim.conv2d(cnv5, 64, [3, 3], stride=1, scope="cnv6")
-            cnv7 = slim.conv2d(cnv6, 96, [3, 3], stride=2, scope="cnv7")
-            cnv8 = slim.conv2d(cnv7, 96, [3, 3], stride=1, scope="cnv8")
-            cnv9 = slim.conv2d(cnv8, 128, [3, 3], stride=2, scope="cnv9")
-            cnv10 = slim.conv2d(cnv9, 128, [3, 3], stride=1, scope="cnv10")
-            cnv11 = slim.conv2d(cnv10, 192, [3, 3], stride=2, scope="cnv11")
-            cnv12 = slim.conv2d(cnv11, 192, [3, 3], stride=1, scope="cnv12")
-
-            return cnv2, cnv4, cnv6, cnv8, cnv10, cnv12
+    with tf.variable_scope('feature_net_disp', reuse=reuse):
+        cnv1 = _conv2d(16, 3, 2, name='cnv1')(image)
+        cnv2 = _conv2d(16, 3, 1, name='cnv2')(cnv1)
+        cnv3 = _conv2d(32, 3, 2, name='cnv3')(cnv2)
+        cnv4 = _conv2d(32, 3, 1, name='cnv4')(cnv3)
+        cnv5 = _conv2d(64, 3, 2, name='cnv5')(cnv4)
+        cnv6 = _conv2d(64, 3, 1, name='cnv6')(cnv5)
+        cnv7 = _conv2d(96, 3, 2, name='cnv7')(cnv6)
+        cnv8 = _conv2d(96, 3, 1, name='cnv8')(cnv7)
+        cnv9 = _conv2d(128, 3, 2, name='cnv9')(cnv8)
+        cnv10 = _conv2d(128, 3, 1, name='cnv10')(cnv9)
+        cnv11 = _conv2d(192, 3, 2, name='cnv11')(cnv10)
+        cnv12 = _conv2d(192, 3, 1, name='cnv12')(cnv11)
+        return cnv2, cnv4, cnv6, cnv8, cnv10, cnv12
 
 
 def cost_volumn(feature1, feature2, d=4):
@@ -61,64 +56,28 @@ def cost_volumn(feature1, feature2, d=4):
 
 
 def optical_flow_decoder_dc(inputs, level):
-    with slim.arg_scope(
-        [slim.conv2d, slim.conv2d_transpose],
-            weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-            activation_fn=_leaky_relu):
-        cnv1 = slim.conv2d(
-            inputs, 128, [3, 3], stride=1, scope="cnv1_fd_" + str(level))
-        cnv2 = slim.conv2d(
-            cnv1, 128, [3, 3], stride=1, scope="cnv2_fd_" + str(level))
-        cnv3 = slim.conv2d(
-            tf.concat(
-                [cnv1, cnv2], axis=3),
-            96, [3, 3],
-            stride=1,
-            scope="cnv3_fd_" + str(level))
-        cnv4 = slim.conv2d(
-            tf.concat(
-                [cnv2, cnv3], axis=3),
-            64, [3, 3],
-            stride=1,
-            scope="cnv4_fd_" + str(level))
-        cnv5 = slim.conv2d(
-            tf.concat(
-                [cnv3, cnv4], axis=3),
-            32, [3, 3],
-            stride=1,
-            scope="cnv5_fd_" + str(level))
-        flow_x = slim.conv2d(
-            tf.concat(
-                [cnv4, cnv5], axis=3),
-            1, [3, 3],
-            stride=1,
-            scope="cnv6_fd_" + str(level),
-            activation_fn=None)
-
-        flow_y = tf.zeros_like(flow_x)
-        flow = tf.concat([flow_x, flow_y], axis=3)
-
-        return flow, cnv5
+    cnv1 = _conv2d(128, 3, 1, name=f'cnv1_fd_{level}')(inputs)
+    cnv2 = _conv2d(128, 3, 1, name=f'cnv2_fd_{level}')(cnv1)
+    cnv3 = _conv2d(96, 3, 1, name=f'cnv3_fd_{level}')(tf.concat([cnv1, cnv2], axis=3))
+    cnv4 = _conv2d(64, 3, 1, name=f'cnv4_fd_{level}')(tf.concat([cnv2, cnv3], axis=3))
+    cnv5 = _conv2d(32, 3, 1, name=f'cnv5_fd_{level}')(tf.concat([cnv3, cnv4], axis=3))
+    flow_x = _conv2d(1, 3, 1, activation=None, name=f'cnv6_fd_{level}')(tf.concat([cnv4, cnv5], axis=3))
+    flow_y = tf.zeros_like(flow_x)
+    flow = tf.concat([flow_x, flow_y], axis=3)
+    return flow, cnv5
 
 
 def context_net(inputs):
-    with slim.arg_scope(
-        [slim.conv2d, slim.conv2d_transpose],
-            weights_regularizer=slim.l2_regularizer(opt.weight_decay),
-            activation_fn=_leaky_relu):
-        cnv1 = slim.conv2d(inputs, 128, [3, 3], rate=1, scope="cnv1_cn")
-        cnv2 = slim.conv2d(cnv1, 128, [3, 3], rate=2, scope="cnv2_cn")
-        cnv3 = slim.conv2d(cnv2, 128, [3, 3], rate=4, scope="cnv3_cn")
-        cnv4 = slim.conv2d(cnv3, 96, [3, 3], rate=8, scope="cnv4_cn")
-        cnv5 = slim.conv2d(cnv4, 64, [3, 3], rate=16, scope="cnv5_cn")
-        cnv6 = slim.conv2d(cnv5, 32, [3, 3], rate=1, scope="cnv6_cn")
-
-        flow_x = slim.conv2d(
-            cnv6, 1, [3, 3], rate=1, scope="cnv7_cn", activation_fn=None)
-        flow_y = tf.zeros_like(flow_x)
-        flow = tf.concat([flow_x, flow_y], axis=3)
-
-        return flow
+    cnv1 = _conv2d(128, 3, 1, dilation_rate=1, name="cnv1_cn")(inputs)
+    cnv2 = _conv2d(128, 3, 1, dilation_rate=2, name="cnv2_cn")(cnv1)
+    cnv3 = _conv2d(128, 3, 1, dilation_rate=4, name="cnv3_cn")(cnv2)
+    cnv4 = _conv2d(96, 3, 1, dilation_rate=8,  name="cnv4_cn")(cnv3)
+    cnv5 = _conv2d(64, 3, 1, dilation_rate=16, name="cnv5_cn")(cnv4)
+    cnv6 = _conv2d(32, 3, 1, dilation_rate=1, name="cnv6_cn")(cnv5)
+    flow_x = _conv2d(1, 3, 1, dilation_rate=1, activation=None, name="cnv7_cn")(cnv6)
+    flow_y = tf.zeros_like(flow_x)
+    flow = tf.concat([flow_x, flow_y], axis=3)
+    return flow
 
 
 def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):

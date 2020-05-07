@@ -52,7 +52,7 @@ def train(Model, Model_eval, opt):
 
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("train_model"):
-                model = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
+                model = Model(imageL, imageR, dispL, dispR, scope=vs)
                 var_train_list, var_restored = collect_and_restore_variables(vs, sess)
 
                 reg_loss = tf.math.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))

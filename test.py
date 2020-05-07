@@ -17,7 +17,6 @@ from misc import write_pfm, query_K, rescale_K, resize_image_pairs, warp_topdown
 from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
 from eval.evaluate_mask import load_gt_mask
 from eval.evaluation_utils import width_to_focal
-from eval.test_model import TestModel
 
 
 def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
@@ -123,17 +122,12 @@ def main(unused_argv):
     opt.batch_size = 1
     opt.mode = 'stereosv'
     opt.pretrained_model = '.results_stereosv/model-log'
-    Model, Model_eval = autoflags()
+    _, Model_eval = autoflags()
 
     with tf.device('/gpu:0'), tf.Graph().as_default():
         print('Constructing models and inputs.')
-        imageL = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_L')
-        imageR = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_input_R')
-        dispL = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_disp_L')
-        dispR = tf.placeholder(tf.float32, [1, opt.img_height, opt.img_width, 3], name='dummy_disp_R')
         with tf.variable_scope(tf.get_variable_scope()) as vs:
             with tf.name_scope("test_model"):
-                _ = Model(imageL, imageR, dispL, dispR, reuse_scope=False, scope=vs)
                 model = Model_eval(scope=vs)
 
         # count weights

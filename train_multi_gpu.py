@@ -60,7 +60,7 @@ def train(Model, Model_eval, opt):
                 with tf.device(f'/gpu:{i}'):
                     scopename = "train_model" if i == 0 else f'tower_{i}'
                     with tf.name_scope(scopename):
-                        model = Model(split_imageL[i], split_imageR[i], split_dispL[i], split_dispR[i], reuse_scope=(i > 0), scope=vs)
+                        model = Model(split_imageL[i], split_imageR[i], split_dispL[i], split_dispR[i], scope=vs)
 
                         # Note variables and summaries reside in first GPU
                         if i == 0:
