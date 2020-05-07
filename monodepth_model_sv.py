@@ -2,11 +2,12 @@ from collections import namedtuple
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.layers import AveragePooling2D
 
 from opt_utils import opt
 from nets.pwc_disp import pwc_disp, feature_pyramid_disp
 from core_warp import inv_warp_flow, fwd_warp_flow
-from loss_utils import charbonnier_loss
+from loss_utils import charbonnier_loss, SSIM
 from pcdlib import tf_populate_pcd, tf_detect_plane_xz
 
 class MonodepthModel(object):
@@ -19,13 +20,15 @@ class MonodepthModel(object):
         self.left_feature = left_feature
         self.right_feature = right_feature
 
-        self.build_model()
+        with tf.variable_scope('depth_net'):
+            self.disp4, self.disp8, self.disp16, self.disp32 = pwc_disp(
+                self.left, self.right, self.left_feature, self.right_feature)
 
         if self.mode == 'train':
             self.build_outputs()
 
-            dispL_pyramid = self.scale_pyramid(left_disp, 4)
-            dispR_pyramid = self.scale_pyramid(right_disp, 4)
+            dispL_pyramid = self.scale_pyramid(left_disp, 4, 2, 4)
+            dispR_pyramid = self.scale_pyramid(right_disp, 4, 2, 4)
             SCALE_FACTOR = np.array([1.0, 0.8, 0.6, 0.4])
 
             loss = 0
@@ -47,11 +50,11 @@ class MonodepthModel(object):
             self.total_loss = loss
             self.disp_L1_loss = disp_L1_loss[0]
 
-    def scale_pyramid(self, img, num_scales):
-        downsample = tf.keras.layers.AveragePooling2D(2)
-        scaled_imgs = [img]
+    def scale_pyramid(self, img, pool_size0, pool_size1, num_scales):
+        scaled_imgs = [img if pool_size0 == 1 else AveragePooling2D(pool_size0)(img)]
+        downsample1 = AveragePooling2D(pool_size1)
         for _ in range(1, num_scales):
-            scaled_imgs.append(downsample(scaled_imgs[-1]))
+            scaled_imgs.append(downsample1(scaled_imgs[-1]))
         return scaled_imgs
 
     def generate_flow_left(self, disp, scale):
@@ -63,23 +66,10 @@ class MonodepthModel(object):
     def generate_flow_right(self, disp, scale):
         return self.generate_flow_left(-disp, scale)
 
-    def build_model(self):
-        with tf.variable_scope('depth_net'):
-            self.left_pyramid = self.scale_pyramid(self.left, 4)
-            if self.mode == 'train':
-                self.right_pyramid = self.scale_pyramid(self.right, 4)
-
-            self.model_input = tf.concat([self.left, self.right], 3)
-
-            self.disp1, self.disp2, self.disp3, self.disp4, self.disp_pyr = pwc_disp(
-                self.left, self.right, self.left_feature, self.right_feature)
-
     def build_outputs(self):
         # STORE DISPARITIES
-        H = opt.img_height
-        W = opt.img_width
         with tf.variable_scope('disparities'):
-            self.disp_est = [self.disp1, self.disp2, self.disp3, self.disp4]
+            self.disp_est = [self.disp4, self.disp8, self.disp16, self.disp32]
             self.disp_left_est = [d[:, :, :, 0:1] for d in self.disp_est]
             self.disp_right_est = [d[:, :, :, 1:2] for d in self.disp_est]
 
@@ -91,7 +81,7 @@ class Model_stereosv(object):
             right_feature = feature_pyramid_disp(imageR, reuse=True)
 
             model = MonodepthModel('train', imageL, imageR, left_feature, right_feature, dispL, dispR)
-            outputs = dict(disp=[model.disp1, model.disp2, model.disp3, model.disp4])
+            outputs = dict(disp=[model.disp4, model.disp8, model.disp16, model.disp32])
 
         self.loss = model.total_loss
         self.outputs = dict(stereo=outputs)
@@ -118,8 +108,8 @@ class Model_eval_stereosv(object):
             feature_R = feature_pyramid_disp(input_R, reuse=True)
 
             model = MonodepthModel('test', input_L, input_R, feature_L, feature_R, None, None)
-            pred_disp = [model.disp1, model.disp2, model.disp3, model.disp4]
-            pred_tmap = self.build_traversability_map(model.disp_pyr[:, :, :, 0:1], K, baseline)
+            pred_disp = [model.disp4, model.disp8, model.disp16, model.disp32]
+            pred_tmap = self.build_traversability_map(model.disp4[:, :, :, 0:1], K, baseline)
 
         self.input_L = input_uint8_L
         self.input_R = input_uint8_R

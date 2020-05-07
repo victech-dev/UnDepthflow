@@ -151,16 +151,15 @@ def construct_model_pwc_full_disp(feature1, feature2, image1, neg=False):
     else:
         flow2 = tf.nn.relu(flow2)
 
-    disp_pyr = flow2[:, :, :, 0:1] / (W / (2**2)) # disparity of pyramid bottom
-    disp0 = upsampling_x4(disp_pyr) # 1/4 -> 1
-    disp1 = upsampling_x4(flow3[:, :, :, 0:1] / (W / (2**3))) # 1/8 -> 1/2
-    disp2 = upsampling_x4(flow4[:, :, :, 0:1] / (W / (2**4))) # 1/16 -> 1/4
-    disp3 = upsampling_x4(flow5[:, :, :, 0:1] / (W / (2**5))) # 1/32 -> 1/8
+    disp0 = flow2[:, :, :, 0:1] / (W / (2**2)) # 1/4 of input size
+    disp1 = flow3[:, :, :, 0:1] / (W / (2**3)) # 1/8 of input size
+    disp2 = flow4[:, :, :, 0:1] / (W / (2**4)) # 1/16 of input size
+    disp3 = flow5[:, :, :, 0:1] / (W / (2**5)) # 1/32 of input size
 
     if neg:
-        return -disp0, -disp1, -disp2, -disp3, -disp_pyr
+        return -disp0, -disp1, -disp2, -disp3
     else:
-        return disp0, disp1, disp2, disp3, disp_pyr
+        return disp0, disp1, disp2, disp3
 
 
 def pwc_disp(image1, image2, feature1, feature2):
