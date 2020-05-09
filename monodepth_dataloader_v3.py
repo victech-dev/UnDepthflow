@@ -72,14 +72,10 @@ def elastic_distorter(W, H, alpha):
         interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
-    if isinstance(imgL_path, bytes):
-        imgL_path = imgL_path.decode()
-    if isinstance(imgR_path, bytes):
-        imgR_path = imgR_path.decode()
-    if isinstance(dispL_path, bytes):
-        dispL_path = dispL_path.decode()
-    if isinstance(dispR_path, bytes):
-        dispR_path = dispR_path.decode()
+    imgL_path = imgL_path.numpy().decode()
+    imgR_path = imgR_path.numpy().decode()
+    dispL_path = dispL_path.numpy().decode()
+    dispR_path = dispR_path.numpy().decode()
 
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
     imgL = cv2.cvtColor(cv2.imread(imgL_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
@@ -182,7 +178,7 @@ def batch_from_dataset():
 
     # load image
     def _loaditems(imgL_path, imgR_path, dispL_path, dispR_path):
-        imgL, imgR, dispL, dispR = tf.py_func(read_image, 
+        imgL, imgR, dispL, dispR = tf.py_function(read_image, 
             [imgL_path, imgR_path, dispL_path, dispR_path], 
             (tf.float32, tf.float32, tf.float32, tf.float32))
         return imgL, imgR, dispL, dispR
@@ -202,35 +198,29 @@ def batch_from_dataset():
     
     # prefetch
     ds = ds.prefetch(16)
-
-    # return as element
-    iterator = ds.make_one_shot_iterator()
-    next_element = iterator.get_next()
-    return next_element
+    return iter(ds)
 
 if __name__ == '__main__':
     import os
     from collections import namedtuple
 
-    opt.data_dir = 'M:/datasets/dexter/'
+    opt.data_dir = 'E:/datasets/dexter/'
     opt.train_file = './filenames/dexter_filenames.txt'
     opt.batch_size = 1
 
-    with tf.Graph().as_default(), tf.device('/cpu:0'):
-        element = batch_from_dataset()
-        sess = tf.Session()
-        for i in range(256):
-            imgL, imgR, dispL, dispR = sess.run(element)
-            imgL, imgR = imgL[0], imgR[0]
-            dispL, dispR = dispL[0], dispR[0]
-            H, W = imgL.shape[:2]
-            tiled = np.zeros((H*2, W*2, 3), np.uint8)
-            tiled[:H,:W] = cv2.convertScaleAbs(imgL, alpha=255)
-            tiled[:H,W:] = cv2.convertScaleAbs(imgR, alpha=255)
-            disp = np.concatenate([dispL, dispR], axis=1)
-            disp = cv2.normalize(disp, None, 0, 1, cv2.NORM_MINMAX)
-            disp = cv2.convertScaleAbs(disp, alpha=255)
-            tiled[H:] = np.atleast_3d(disp)
-            imgtool.imshow(tiled)
+    ds_iter = batch_from_dataset()
+    for i in range(256):
+        imgL, imgR, dispL, dispR = next(ds_iter)
+        imgL, imgR = imgL[0].numpy(), imgR[0].numpy()
+        dispL, dispR = dispL[0].numpy(), dispR[0].numpy()
+        H, W = imgL.shape[:2]
+        tiled = np.zeros((H*2, W*2, 3), np.uint8)
+        tiled[:H,:W] = cv2.convertScaleAbs(imgL, alpha=255)
+        tiled[:H,W:] = cv2.convertScaleAbs(imgR, alpha=255)
+        disp = np.concatenate([dispL, dispR], axis=1)
+        disp = cv2.normalize(disp, None, 0, 1, cv2.NORM_MINMAX)
+        disp = cv2.convertScaleAbs(disp, alpha=255)
+        tiled[H:] = np.atleast_3d(disp)
+        imgtool.imshow(tiled)
 
 

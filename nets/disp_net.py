@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D
+from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D, AveragePooling2D
 from tensorflow.keras import Sequential, Model, Input
 import tensorflow_addons as tfa
 import functools
@@ -7,8 +7,8 @@ import functools
 # from opt_utils import opt
 #DEBUG!!!!!!
 from collections import namedtuple
-Options = namedtuple('Option', 'weight_decay img_height img_width')
-opt = Options(1e-4, 384, 512)
+Options = namedtuple('Option', 'weight_decay img_height img_width loss_metric')
+opt = Options(1e-4, 384, 512, 'l1-log')
 #DEBUG!!!!!!
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
@@ -188,43 +188,85 @@ class DispNet(Model):
         self._pwcL = PwcNet_Single(True, name='left_disp')
         self._pwcR = PwcNet_Single(False, name='right_disp')
 
-    ######@tf.function
-    @tf.function(input_signature=[[tf.TensorSpec([None, 384, 512, 3], tf.float32), tf.TensorSpec([None, 384, 512, 3], tf.float32)]])
+    def _scale_pyramid(self, img, pool_size0, pool_size1, num_scales):
+        scaled_imgs = [img if pool_size0 == 1 else AveragePooling2D(pool_size0)(img)]
+        downsample1 = AveragePooling2D(pool_size1)
+        for _ in range(1, num_scales):
+            scaled_imgs.append(downsample1(scaled_imgs[-1]))
+        return scaled_imgs
+
+    #####@tf.function
     def call(self, inputs, training=None):
-        print("***** Tracing with args: ", inputs, training)
-        imgL, imgR = inputs
+        imgL, imgR = inputs[:2]
+
         featL = self._feat(imgL)
         featR = self._feat(imgR)
-        dispL = self._pwcL(featL + featR)
-        dispR = self._pwcR(featR + featL)
-        return dispL + dispR
+        pred_dispL = self._pwcL(featL + featR)
+        pred_dispR = self._pwcR(featR + featL)
 
-# def disp_net():
-#     feat = FeaturePyramid(name='feature_net_disp')
-#     pwcL = PwcNet_Single(True, name='left_disp')
-#     pwcR = PwcNet_Single(False, name='right_disp')
-#     imgL = Input(shape=(384, 512, 3), dtype='float32')
-#     imgR = Input(shape=(384, 512, 3), dtype='float32')
-#     featL = feat(imgL)
-#     featR = feat(imgR)
-#     dispL = pwcL(featL + featR)
-#     dispR = pwcR(featR + featL)
-#     model = Model([imgL, imgR], dispL + dispR)
-#     return model
+        if training == True:
+            dispL, dispR = inputs[2:]
+            dispL_pyr = self._scale_pyramid(dispL, 4, 2, 4)
+            dispR_pyr = self._scale_pyramid(dispR, 4, 2, 4)
+            SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
+
+            for s in range(4):
+                # if s == 0:
+                #     left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
+                #     right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
+                #     pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
+                #     self.add_metric(pixel_error, name='l1-loss')
+
+                if opt.loss_metric == 'l1-log': # l1 of log
+                    left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
+                    right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
+                    self.add_loss(SCALE_FACTOR[s] * tf.reduce_mean(left_error + right_error))
+                # elif opt.loss_metric == 'charbonnier':
+                #     loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
+                else:
+                    raise ValueError('! Unsupported loss metric')
+            
+        return pred_dispL + pred_dispR
 
 
-def imshow(img, name='imshow', rgb=True, wait=True, norm=True):
-    import numpy as np
-    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-    if len(img.shape)==3 and img.shape[2]==3 and rgb:
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    if norm and (img.dtype==np.float32 or img.dtype==np.float):
-        img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
-        img = cv2.convertScaleAbs(img, alpha=255)
-    cv2.imshow(name, img)
-    if wait:
-        cv2.waitKey(0)
+    # def build_traversability_map(self, disp, K0, baseline):
+    #     '''
+    #     disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
+    #     K0: rescaled already from original size to [opt.img_width, opt.img_height]
+    #     '''
+    #     _, h1, w1, _ = tf.unstack(tf.shape(disp))
+    #     rw = tf.cast(w1, tf.float32) / opt.img_width
+    #     rh = tf.cast(h1, tf.float32) / opt.img_height
 
+    #     # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
+    #     K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
+    #     K1 = K_scale[None,:,:] @ K0
+
+    #     # construct point cloud
+    #     fxb = K1[:,0,0] * baseline
+    #     depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
+    #     xyz = tf_populate_pcd(depth, K1)
+    #     plane_xz = tf_detect_plane_xz(xyz)
+
+    #     # Condition 1: thresh below camera
+    #     cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+    #     # Condition 2: y component of normal vector
+    #     cond2 = tf.cast(plane_xz > 0.85, tf.float32)
+    #     return cond1 * cond2
+
+
+# def imshow(img, name='imshow', rgb=True, wait=True, norm=True):
+#     import numpy as np
+#     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+#     if len(img.shape)==3 and img.shape[2]==3 and rgb:
+#         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+#     if norm and (img.dtype==np.float32 or img.dtype==np.float):
+#         img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
+#         img = cv2.convertScaleAbs(img, alpha=255)
+#     cv2.imshow(name, img)
+#     if wait:
+#         cv2.waitKey(0)
+'''
 if __name__ == '__main__':
     import cv2
     import numpy as np
@@ -232,11 +274,13 @@ if __name__ == '__main__':
     import time
 
     disp_net = DispNet(name='depth_net')
-    disp_net.build([(None, 384, 512, 3), (None, 384, 512, 3)])
-    #disp_net = disp_net()
-    # imgL0 = np.ones((1, 384, 512, 3), np.float32)
-    # imgR0 = np.ones((1, 384, 512, 3), np.float32)
-    # disp_net([imgL0, imgR0])
+    imgL0 = np.ones((1, 384, 512, 3), np.float32)
+    imgR0 = np.ones((1, 384, 512, 3), np.float32)
+    disp_net([imgL0, imgR0], True)
+    imgL1 = tf.ones((1, 384, 512, 3), tf.float32)
+    imgR1 = tf.ones((1, 384, 512, 3), tf.float32)
+    disp_net([imgL1, imgR1], True)
+    exit()
 
     disp_net.load_weights('.results_stereosv/model-tf2')
 
@@ -245,8 +289,8 @@ if __name__ == '__main__':
     # rename(var_dict)
     # disp_net.save_weights('.results_stereosv/model-tf2')
 
-    ''' point cloud test of office image of inbo.yeo '''
-    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+    # point cloud test of office image of inbo.yeo 
+    data_dir = Path('E:\\datasets\\camera_taker\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
     for index in range(len(imgnamesL)):
         imgnameL = imgnamesL[index % len(imgnamesL)]
@@ -265,6 +309,4 @@ if __name__ == '__main__':
         print("* elspaed:", t1 - t0)
         disp0 = disp0[0]
         imshow(disp0.numpy())
-
-
-
+'''

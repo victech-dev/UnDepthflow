@@ -16,7 +16,7 @@ from tensorflow.python.platform import app
 from opt_utils import opt, autoflags
 
 def main(unused_argv):
-    Model, Model_eval = autoflags()
+    autoflags()
     if opt.trace == "":
         raise ValueError("OUT_DIR must be specified")
 
@@ -24,7 +24,7 @@ def main(unused_argv):
         from train_single_gpu import train
     else:
         from train_multi_gpu import train
-    train(Model, Model_eval, opt)
+    train(opt)
 
 
 if __name__ == '__main__':
