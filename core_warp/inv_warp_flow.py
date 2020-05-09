@@ -83,7 +83,6 @@ def inv_warp_flow(image, flo, name='inv_warp_flow'):
 
 if __name__ == '__main__':
     import numpy as np
-    tf.enable_eager_execution()
 
     image = tf.constant(
         [1, 2, 3, 4, 5, 6, 7, 8, 9], shape=[1, 3, 3, 1], dtype="float32")
@@ -97,3 +96,8 @@ if __name__ == '__main__':
     # output should be [[1,2,3],[4,6,6],[7,8,9]]
     image2 = inv_warp_flow(image, flo)
     print("*** Image:", tf.squeeze(image2))
+
+    import tensorflow_addons as tfa
+    flo_yx = flo[:,:,:,::-1]
+    image3 = tfa.image.dense_image_warp(image, -flo_yx)
+    print("*** Image from tfa:", tf.squeeze(image3))

@@ -13,7 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 import tensorflow as tf
-from tensorflow.layers import Conv2D
+from tensorflow.keras.layers import Conv2D
+from tensorflow.keras import Sequential, Model, Input
 import functools
 
 from opt_utils import opt
@@ -21,24 +22,46 @@ from core_warp import inv_warp_flow
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _l2 = tf.keras.regularizers.l2(opt.weight_decay)
-_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_initializer='glorot_normal', kernel_regularizer=_l2)
+_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_regularizer=_l2)
 
 
-def feature_pyramid_disp(image, reuse):
-    with tf.variable_scope('feature_net_disp', reuse=reuse):
-        cnv1 = _conv2d(16, 3, 2, name='cnv1')(image)
-        cnv2 = _conv2d(16, 3, 1, name='cnv2')(cnv1)
-        cnv3 = _conv2d(32, 3, 2, name='cnv3')(cnv2)
-        cnv4 = _conv2d(32, 3, 1, name='cnv4')(cnv3)
-        cnv5 = _conv2d(64, 3, 2, name='cnv5')(cnv4)
-        cnv6 = _conv2d(64, 3, 1, name='cnv6')(cnv5)
-        cnv7 = _conv2d(96, 3, 2, name='cnv7')(cnv6)
-        cnv8 = _conv2d(96, 3, 1, name='cnv8')(cnv7)
-        cnv9 = _conv2d(128, 3, 2, name='cnv9')(cnv8)
-        cnv10 = _conv2d(128, 3, 1, name='cnv10')(cnv9)
-        cnv11 = _conv2d(192, 3, 2, name='cnv11')(cnv10)
-        cnv12 = _conv2d(192, 3, 1, name='cnv12')(cnv11)
-        return cnv2, cnv4, cnv6, cnv8, cnv10, cnv12
+def feature_pyramid_model():
+    model = Sequential([
+        Input(shape=(opt.img_height, opt.img_width, 3)),
+        _conv2d(16, 3, 2, name='cnv1'),
+        _conv2d(16, 3, 1, name='cnv2'),
+        _conv2d(32, 3, 2, name='cnv3'),
+        _conv2d(32, 3, 1, name='cnv4'),
+        _conv2d(64, 3, 2, name='cnv5'),
+        _conv2d(64, 3, 1, name='cnv6'),
+        _conv2d(96, 3, 2, name='cnv7'),
+        _conv2d(96, 3, 1, name='cnv8'),
+        _conv2d(128, 3, 2, name='cnv9'),
+        _conv2d(128, 3, 1, name='cnv10'),
+        _conv2d(192, 3, 2, name='cnv11'),
+        _conv2d(192, 3, 1, name='cnv12')
+    ], name='feature_net_disp')
+
+    feat_names = ['cnv2', 'cnv4', 'cnv6', 'cnv8', 'cnv10', 'cnv12']
+    feature_extractor = Model(inputs=model.inputs,
+        outputs=[model.get_layer(name=fname).output for fname in feat_names])
+    return feature_extractor
+
+# def feature_pyramid_disp(image, reuse):
+#     with tf.variable_scope('feature_net_disp', reuse=reuse):
+#         cnv1 = _conv2d(16, 3, 2, name='cnv1')(image)
+#         cnv2 = _conv2d(16, 3, 1, name='cnv2')(cnv1)
+#         cnv3 = _conv2d(32, 3, 2, name='cnv3')(cnv2)
+#         cnv4 = _conv2d(32, 3, 1, name='cnv4')(cnv3)
+#         cnv5 = _conv2d(64, 3, 2, name='cnv5')(cnv4)
+#         cnv6 = _conv2d(64, 3, 1, name='cnv6')(cnv5)
+#         cnv7 = _conv2d(96, 3, 2, name='cnv7')(cnv6)
+#         cnv8 = _conv2d(96, 3, 1, name='cnv8')(cnv7)
+#         cnv9 = _conv2d(128, 3, 2, name='cnv9')(cnv8)
+#         cnv10 = _conv2d(128, 3, 1, name='cnv10')(cnv9)
+#         cnv11 = _conv2d(192, 3, 2, name='cnv11')(cnv10)
+#         cnv12 = _conv2d(192, 3, 1, name='cnv12')(cnv11)
+#         return cnv2, cnv4, cnv6, cnv8, cnv10, cnv12
 
 
 def cost_volumn(feature1, feature2, d=4):
