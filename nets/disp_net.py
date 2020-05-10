@@ -204,6 +204,7 @@ class DispNet(Model):
         pred_dispL = self._pwcL(featL + featR)
         pred_dispR = self._pwcR(featR + featL)
 
+        loss = 0.0
         if training == True:
             dispL, dispR = inputs[2:]
             dispL_pyr = self._scale_pyramid(dispL, 4, 2, 4)
@@ -220,11 +221,12 @@ class DispNet(Model):
                 if opt.loss_metric == 'l1-log': # l1 of log
                     left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
                     right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
-                    self.add_loss(SCALE_FACTOR[s] * tf.reduce_mean(left_error + right_error))
+                    loss += SCALE_FACTOR[s] * tf.reduce_mean(left_error + right_error)
                 # elif opt.loss_metric == 'charbonnier':
                 #     loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
                 else:
                     raise ValueError('! Unsupported loss metric')
+        self.add_loss(loss)
             
         return pred_dispL + pred_dispR
 

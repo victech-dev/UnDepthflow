@@ -193,12 +193,12 @@ def batch_from_dataset():
         imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
         dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
         dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
-        return imgL, imgR, dispL, dispR
+        return (imgL, imgR, dispL, dispR), tuple()
     ds = ds.map(_setshape, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     
     # prefetch
     ds = ds.prefetch(16)
-    return iter(ds)
+    return ds
 
 if __name__ == '__main__':
     import os
@@ -208,11 +208,10 @@ if __name__ == '__main__':
     opt.train_file = './filenames/dexter_filenames.txt'
     opt.batch_size = 1
 
-    ds_iter = batch_from_dataset()
+    ds_iter = iter(batch_from_dataset())
     for i in range(256):
-        imgL, imgR, dispL, dispR = next(ds_iter)
-        imgL, imgR = imgL[0].numpy(), imgR[0].numpy()
-        dispL, dispR = dispL[0].numpy(), dispR[0].numpy()
+        inputs, _ = next(ds_iter)
+        imgL, imgR, dispL, dispR = map(lambda x: x[0].numpy(), inputs)
         H, W = imgL.shape[:2]
         tiled = np.zeros((H*2, W*2, 3), np.uint8)
         tiled[:H,:W] = cv2.convertScaleAbs(imgL, alpha=255)

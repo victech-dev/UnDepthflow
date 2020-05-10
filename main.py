@@ -1,31 +1,37 @@
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# Copyright 2016 The TensorFlow Authors All Rights Reserved.
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
+import tensorflow as tf
 from tensorflow.python.platform import app
+import numpy as np
+
 from opt_utils import opt, autoflags
+from nets.disp_net import DispNet
+from monodepth_dataloader_v3 import batch_from_dataset
+
+EPOCHS = 100
+
+def lr_scheduler(epoch):
+    lr = opt.learning_rate
+    t = epoch / (EPOCHS - 1)
+    if isinstance(lr, (float, int)):
+        return float(lr)
+    elif isinstance(lr, (list, tuple)):
+        lr_max, lr_min = map(float, lr)
+        print('***** learning late:', lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(t * np.pi)))
+        return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(t * np.pi))
+    else:
+        raise ValueError('Invalid learning rate')
 
 def main(unused_argv):
     autoflags()
     if opt.trace == "":
         raise ValueError("OUT_DIR must be specified")
 
-    if opt.num_gpus == 1:
-        from train_single_gpu import train
-    else:
-        from train_multi_gpu import train
-    train(opt)
+    ds_trn = batch_from_dataset()
+    model = DispNet()
+    model.compile(optimizer=tf.keras.optimizers.Adam())
 
+    callbacks = []
+    callbacks.append(tf.keras.callbacks.LearningRateScheduler(lr_scheduler))
+    model.fit(x=ds_trn, steps_per_epoch=10000, epochs=EPOCHS, verbose=1, callbacks=callbacks)
 
 if __name__ == '__main__':
     app.run()
