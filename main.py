@@ -10,12 +10,11 @@ EPOCHS = 100
 
 def lr_scheduler(epoch):
     lr = opt.learning_rate
-    t = epoch / (EPOCHS - 1)
     if isinstance(lr, (float, int)):
         return float(lr)
     elif isinstance(lr, (list, tuple)):
+        t = epoch / (EPOCHS - 1)
         lr_max, lr_min = map(float, lr)
-        print('***** learning late:', lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(t * np.pi)))
         return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(t * np.pi))
     else:
         raise ValueError('Invalid learning rate')
