@@ -9,8 +9,6 @@ opt = flags.FLAGS
 flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
 flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
 flags.DEFINE_list('pretrained_model', [], 'filepath of a pretrained model to initialize from.')
-flags.DEFINE_boolean("freeze_pretrained", False, "whether to freeze pretrained variables")
-flags.DEFINE_string('mode', 'stereosv', 'only stereosv')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')
@@ -58,9 +56,6 @@ def path_fix_existing(path: Path):
 
 
 def autoflags():
-    if opt.mode != 'stereosv':
-        raise Exception("! Only support stereosv now")
-
     # data path
     dirs = [os.path.expanduser('~/datasets/dexter'),
         '/media/data/datasets/dexter', '/media/vicnas/datasets/dexter', 
@@ -75,7 +70,7 @@ def autoflags():
     print('*** Dexter data path:', found)
 
     if opt.trace == 'AUTO':
-        trace = Path(f'.results_{opt.mode}')
+        trace = Path(f'.results_stereosv')
         if trace.exists():
             trace = path_fix_existing(trace)
         opt.trace = str(trace)
