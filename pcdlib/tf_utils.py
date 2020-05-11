@@ -13,7 +13,8 @@ def tf_populate_pcd(depth, K):
 
 
 def tf_detect_plane_xz(xyz):
-    # valid padding: shape of sigma = [b, H-ksize+1, W-ksize+1, 3, 3]
+    # Calculate covariance matrix of neighboring points
+    # http://jacoposerafin.com/wp-content/uploads/bogoslavskyi13ecmr.pdf
     ksize = 5
     P = tf.nn.avg_pool2d(xyz, ksize, 1, 'SAME')
     xyz2 = xyz[:,:,:,:,None] @ xyz[:,:,:,None,:]
@@ -23,7 +24,7 @@ def tf_detect_plane_xz(xyz):
     sigma = S - P[:,:,:,:,None] @ P[:,:,:,None,:]
 
     # eigenvalue solver of 3x3 symmetric matrix
-    # much faster than tf.linalg.eigh when input is multiplematrices
+    # much faster than tf.linalg.eigh when input is multiple matrices
     # https://www.geometrictools.com/Documentation/RobustEigenSymmetric3x3.pdf
     A = sigma
     A_max = tf.reduce_max(tf.abs(A), axis=(-2,-1))
