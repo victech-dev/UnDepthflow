@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.python.platform import app
-from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint
+from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint, TensorBoard
 import numpy as np
 import os
 
@@ -33,7 +33,8 @@ def main(unused_argv):
     callbacks = []
     callbacks.append(LearningRateScheduler(lr_scheduler))
     callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}'), save_weights_only=True, save_best_only=False))
-    
+    callbacks.append(TensorBoard(log_dir=opt.trace, update_freq=100))
+
     ds_trn = batch_from_dataset()
     model.fit(x=ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)
 
