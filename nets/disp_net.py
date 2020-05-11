@@ -93,7 +93,8 @@ class PwcNet_Single(Layer):
         self._dec5 = DispDecoder(name='dec5')
         self._dec6 = DispDecoder(name='dec6')
 
-    def _cost_volumn(self, feature1, feature2, d=4):
+    @staticmethod
+    def _cost_volumn(feature1, feature2, d=4):
         W = feature1.shape[2]
         feature2 = tf.pad(feature2, [[0, 0], [0, 0], [d, d], [0, 0]], "CONSTANT")
         cv = []
@@ -108,7 +109,8 @@ class PwcNet_Single(Layer):
     #     cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
     #     return cv
 
-    def _inv_warp_flow(self, image, flow):
+    @staticmethod
+    def _inv_warp_flow(image, flow):
         return tfa.image.dense_image_warp(image, -flow)
 
     def call(self, inputs):
@@ -189,7 +191,8 @@ class DispNet(Model):
         self._pwcL = PwcNet_Single(True, name='left_disp')
         self._pwcR = PwcNet_Single(False, name='right_disp')
 
-    def _scale_pyramid(self, img, pool_size0, pool_size1, num_scales):
+    @staticmethod
+    def _scale_pyramid(img, pool_size0, pool_size1, num_scales):
         scaled_imgs = [img if pool_size0 == 1 else AveragePooling2D(pool_size0)(img)]
         downsample1 = AveragePooling2D(pool_size1)
         for _ in range(1, num_scales):
@@ -214,9 +217,9 @@ class DispNet(Model):
             for s in range(4):
                 left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
                 right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
-                # if s == 0:
-                #     pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
-                #     self.add_metric(pixel_error, name='l1-loss')
+                if s == 0:
+                    pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
+                    self.add_metric(pixel_error, name='epe', aggregation='mean')
 
                 if opt.loss_metric == 'l1-log': # l1 of log
                     left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
