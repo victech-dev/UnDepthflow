@@ -5,7 +5,6 @@ import imgtool
 import cv2
 import functools
 from opt_helper import opt, autoflags
-from misc import read_pfm
 
 def inject_strong_contrast(img, alpha):
     ''' modified from https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv '''
@@ -78,10 +77,10 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     dispR_path = dispR_path.numpy().decode()
 
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
-    imgL = cv2.cvtColor(cv2.imread(imgL_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    imgR = cv2.cvtColor(cv2.imread(imgR_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    dispL, _ = read_pfm(dispL_path)
-    dispR, _ = read_pfm(dispR_path)
+    imgL = imgtool.imread(imgL_path)
+    imgR = imgtool.imread(imgR_path)
+    dispL, _ = imgtool.read_pfm(dispL_path)
+    dispR, _ = imgtool.read_pfm(dispR_path)
     H, W = imgL.shape[:2]
 
     # hue shift

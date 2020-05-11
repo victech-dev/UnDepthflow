@@ -55,8 +55,8 @@ def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=2
 
 
 def predict_disp(sess, model, imgnameL, imgnameR):
-    imgL = imgtool.imread(imgnameL, mode='RGB')
-    imgR = imgtool.imread(imgnameR, mode='RGB')
+    imgL = imgtool.imread(imgnameL)
+    imgR = imgtool.imread(imgnameR)
 
     # denoising?
     # imgL = cv2.blur(imgL, ksize=(3,3))
@@ -80,8 +80,8 @@ def predict_disp(sess, model, imgnameL, imgnameR):
 
 
 def predict_depth(sess, model, imgnameL, imgnameR, cat):
-    imgL = imgtool.imread(imgnameL, mode='RGB')
-    imgR = imgtool.imread(imgnameR, mode='RGB')
+    imgL = imgtool.imread(imgnameL)
+    imgR = imgtool.imread(imgnameR)
     K, baseline = query_K(cat)
 
     # rescale to fit nn-input

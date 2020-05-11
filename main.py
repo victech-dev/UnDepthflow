@@ -26,8 +26,11 @@ if __name__ == '__main__':
     if opt.trace == "":
         raise ValueError("OUT_DIR must be specified")
 
-    model = DispNet()
-    model.compile(optimizer=tf.keras.optimizers.Adam())
+    strategy = tf.distribute.MirroredStrategy()
+    print('* Number of devices: ', strategy.num_replicas_in_sync)
+    with strategy.scope():
+        model = DispNet()
+        model.compile(optimizer=tf.keras.optimizers.Adam())
 
     callbacks = []
     callbacks.append(LearningRateScheduler(lr_scheduler))
