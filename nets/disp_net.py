@@ -229,7 +229,7 @@ class DispNet(Model):
                     loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
                 else:
                     raise ValueError('! Unsupported loss metric')
-        self.add_loss(loss)
+        self.add_loss(loss, inputs=True)
             
         if training == True:
             return tuple()
