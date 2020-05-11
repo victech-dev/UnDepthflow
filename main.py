@@ -6,7 +6,7 @@ import os
 
 from opt_utils import opt, autoflags
 from nets.disp_net import DispNet
-from monodepth_dataloader_v3 import batch_from_dataset
+from dataloader import batch_from_dataset
 
 STEPS_PER_EPOCH = 10000
 EPOCHS = opt.num_iterations // STEPS_PER_EPOCH
