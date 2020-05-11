@@ -1,13 +1,15 @@
 import tensorflow as tf
 from tensorflow.python.platform import app
-from tensorflow.keras.callbacks import LearningRateScheduler
+from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint
 import numpy as np
+import os
 
 from opt_utils import opt, autoflags
 from nets.disp_net import DispNet
 from monodepth_dataloader_v3 import batch_from_dataset
 
-EPOCHS = 100
+STEPS_PER_EPOCH = 10000
+EPOCHS = opt.num_iterations // STEPS_PER_EPOCH
 
 def lr_scheduler(epoch):
     lr = opt.learning_rate
@@ -25,13 +27,15 @@ def main(unused_argv):
     if opt.trace == "":
         raise ValueError("OUT_DIR must be specified")
 
-    ds_trn = batch_from_dataset()
     model = DispNet()
     model.compile(optimizer=tf.keras.optimizers.Adam())
 
     callbacks = []
     callbacks.append(LearningRateScheduler(lr_scheduler))
-    model.fit(x=ds_trn, steps_per_epoch=10000, epochs=EPOCHS, verbose=1, callbacks=callbacks)
+    callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}'), save_weights_only=True, save_best_only=False))
+    
+    ds_trn = batch_from_dataset()
+    model.fit(x=ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)
 
 if __name__ == '__main__':
     app.run()

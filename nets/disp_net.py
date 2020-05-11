@@ -5,6 +5,7 @@ import tensorflow_addons as tfa
 import functools
 
 from opt_utils import opt
+from loss_utils import charbonnier_loss
 # #DEBUG!!!!!!
 # from collections import namedtuple
 # Options = namedtuple('Option', 'weight_decay img_height img_width loss_metric')
@@ -12,8 +13,8 @@ from opt_utils import opt
 # #DEBUG!!!!!!
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
-_l2 = tf.keras.regularizers.l2(opt.weight_decay)
-_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_regularizer=_l2)
+_reg = tf.keras.regularizers.l2(opt.weight_decay) if isinstance(opt.weight_decay, (float, int)) else None
+_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_regularizer=_reg)
 
 class FeaturePyramid(Layer):
     def __init__(self, *args, **kwargs):
@@ -211,9 +212,9 @@ class DispNet(Model):
             SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
 
             for s in range(4):
+                left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
+                right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
                 # if s == 0:
-                #     left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
-                #     right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
                 #     pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
                 #     self.add_metric(pixel_error, name='l1-loss')
 
@@ -221,8 +222,8 @@ class DispNet(Model):
                     left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
                     right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
                     loss += SCALE_FACTOR[s] * tf.reduce_mean(left_error + right_error)
-                # elif opt.loss_metric == 'charbonnier':
-                #     loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
+                elif opt.loss_metric == 'charbonnier':
+                    loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
                 else:
                     raise ValueError('! Unsupported loss metric')
         self.add_loss(loss)
