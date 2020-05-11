@@ -49,7 +49,7 @@ flags.DEFINE_float("flow_consist_weight", 0.01, "Weight for flow consistent")
 flags.DEFINE_float("flow_diff_threshold", 4.0, "threshold when comparing optical flow and rigid flow ")
 
 # for stereosv
-flags.DEFINE_string('loss_metric', 'charbonnier', 'charbonnier or rmsle')
+flags.DEFINE_string('loss_metric', 'l1-log', 'charbonnier or l1-log')
 
 flags.DEFINE_string('eval_pose', '', 'pose seq to evaluate')
 

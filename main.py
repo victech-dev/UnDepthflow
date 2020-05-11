@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.python.platform import app
+from tensorflow.keras.callbacks import LearningRateScheduler
 import numpy as np
 
 from opt_utils import opt, autoflags
@@ -29,7 +30,7 @@ def main(unused_argv):
     model.compile(optimizer=tf.keras.optimizers.Adam())
 
     callbacks = []
-    callbacks.append(tf.keras.callbacks.LearningRateScheduler(lr_scheduler))
+    callbacks.append(LearningRateScheduler(lr_scheduler))
     model.fit(x=ds_trn, steps_per_epoch=10000, epochs=EPOCHS, verbose=1, callbacks=callbacks)
 
 if __name__ == '__main__':

@@ -4,12 +4,12 @@ from tensorflow.keras import Sequential, Model, Input
 import tensorflow_addons as tfa
 import functools
 
-# from opt_utils import opt
-#DEBUG!!!!!!
-from collections import namedtuple
-Options = namedtuple('Option', 'weight_decay img_height img_width loss_metric')
-opt = Options(1e-4, 384, 512, 'l1-log')
-#DEBUG!!!!!!
+from opt_utils import opt
+# #DEBUG!!!!!!
+# from collections import namedtuple
+# Options = namedtuple('Option', 'weight_decay img_height img_width loss_metric')
+# opt = Options(1e-4, 384, 512, 'l1-log')
+# #DEBUG!!!!!!
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _l2 = tf.keras.regularizers.l2(opt.weight_decay)
@@ -195,7 +195,6 @@ class DispNet(Model):
             scaled_imgs.append(downsample1(scaled_imgs[-1]))
         return scaled_imgs
 
-    #####@tf.function
     def call(self, inputs, training=None):
         imgL, imgR = inputs[:2]
 
@@ -228,8 +227,10 @@ class DispNet(Model):
                     raise ValueError('! Unsupported loss metric')
         self.add_loss(loss)
             
-        return pred_dispL + pred_dispR
-
+        if training == True:
+            return tuple()
+        else:
+            return pred_dispL[:1] + pred_dispR[:1]
 
     # def build_traversability_map(self, disp, K0, baseline):
     #     '''
