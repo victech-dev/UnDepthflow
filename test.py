@@ -1,5 +1,4 @@
 import tensorflow as tf
-from tensorflow.python.platform import app
 import os
 import numpy as np
 import imgtool

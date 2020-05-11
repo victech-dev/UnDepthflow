@@ -4,7 +4,7 @@ import numpy as np
 import imgtool
 import cv2
 import functools
-from opt_utils import opt
+from opt_helper import opt, autoflags
 from misc import read_pfm
 
 def inject_strong_contrast(img, alpha):
@@ -201,10 +201,7 @@ def batch_from_dataset():
     return ds
 
 if __name__ == '__main__':
-    import os
-    from collections import namedtuple
-
-    opt.data_dir = 'E:/datasets/dexter/'
+    autoflags()
     opt.train_file = './filenames/dexter_filenames.txt'
     opt.batch_size = 1
 

@@ -1,10 +1,9 @@
 import tensorflow as tf
-from tensorflow.python.platform import app
 from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint, TensorBoard
 import numpy as np
 import os
 
-from opt_utils import opt, autoflags
+from opt_helper import opt, autoflags
 from nets.disp_net import DispNet
 from dataloader import batch_from_dataset
 
@@ -22,7 +21,7 @@ def lr_scheduler(epoch):
     else:
         raise ValueError('Invalid learning rate')
 
-def main(unused_argv):
+if __name__ == '__main__':
     autoflags()
     if opt.trace == "":
         raise ValueError("OUT_DIR must be specified")
@@ -37,6 +36,3 @@ def main(unused_argv):
 
     ds_trn = batch_from_dataset()
     model.fit(x=ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)
-
-if __name__ == '__main__':
-    app.run()

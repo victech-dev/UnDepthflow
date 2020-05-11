@@ -1,8 +1,10 @@
 import os
-import tensorflow as tf
-from tensorflow.python.platform import flags
+from absl import flags
 from pathlib import Path
 import re
+import sys
+
+opt = flags.FLAGS
 
 flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
 flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
@@ -39,7 +41,9 @@ flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel los
 # for stereosv
 flags.DEFINE_string('loss_metric', 'l1-log', 'charbonnier or l1-log')
 flags.DEFINE_integer("num_scales", 4, "Number of scales: 1/2^0, 1/2^1, ..., 1/2^(n-1)")
-opt = flags.FLAGS
+
+# explicitly tell flags library to parse argv
+opt(sys.argv)
 
 
 def path_fix_existing(path: Path):
@@ -78,4 +82,5 @@ def autoflags():
     print('*** Output path:', opt.trace)
 
 
-
+if __name__ == '__main__':
+    autoflags()
