@@ -9,7 +9,7 @@ from loss_utils import charbonnier_loss
 from pcdlib import tf_populate_pcd, tf_detect_plane_xz
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
-_reg = tf.keras.regularizers.l2(opt.weight_decay) if isinstance(opt.weight_decay, (float, int)) else None
+_reg = tf.keras.regularizers.l2(opt.weight_decay)
 _conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_regularizer=_reg)
 
 class FeaturePyramid(Layer):
@@ -110,8 +110,8 @@ class PwcNet_Single(Layer):
         return tfa.image.dense_image_warp(image, -flow)
 
     def call(self, inputs):
-        feature1_1, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = inputs[:6]
-        feature2_1, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = inputs[6:]
+        _, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = inputs[:6]
+        _, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = inputs[6:]
 
         upsampling_x2 = UpSampling2D(size=2, interpolation='bilinear')
 
@@ -232,6 +232,14 @@ class DispNet(Model):
         else:
             return pred_dispL[:1] + pred_dispR[:1]
 
+    @tf.function
+    def predict_single(self, imgL, imgR):
+        imgL = tf.cast(imgL, tf.float32) / 255
+        imgR = tf.cast(imgR, tf.float32) / 255
+        dispL, dispR = self([imgL[None], imgR[None]], False)
+        return dispL[0], dispR[0]
+
+
 class TraversabilityDecoder(Layer):
     def __init__(self, neg, *args, **kwargs):
         super(TraversabilityDecoder, self).__init__(*args, **kwargs)
@@ -263,58 +271,33 @@ class TraversabilityDecoder(Layer):
         return cond1 * cond2
 
 
-# def imshow(img, name='imshow', rgb=True, wait=True, norm=True):
+# if __name__ == '__main__':
+#     import cv2
 #     import numpy as np
-#     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-#     if len(img.shape)==3 and img.shape[2]==3 and rgb:
-#         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-#     if norm and (img.dtype==np.float32 or img.dtype==np.float):
-#         img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
-#         img = cv2.convertScaleAbs(img, alpha=255)
-#     cv2.imshow(name, img)
-#     if wait:
-#         cv2.waitKey(0)
-'''
-if __name__ == '__main__':
-    import cv2
-    import numpy as np
-    from pathlib import Path
-    import time
+#     from pathlib import Path
+#     import time
 
-    disp_net = DispNet(name='depth_net')
-    imgL0 = np.ones((1, 384, 512, 3), np.float32)
-    imgR0 = np.ones((1, 384, 512, 3), np.float32)
-    disp_net([imgL0, imgR0], True)
-    imgL1 = tf.ones((1, 384, 512, 3), tf.float32)
-    imgR1 = tf.ones((1, 384, 512, 3), tf.float32)
-    disp_net([imgL1, imgR1], True)
-    exit()
+#     disp_net = DispNet(name='depth_net')
+#     imgL0 = np.ones((384, 512, 3), np.uint8)
+#     imgR0 = np.ones((384, 512, 3), np.uint8)
+#     disp_net.predict_single(imgL0, imgR0)
+#     disp_net.load_weights('.results_stereosv/model-tf2')
 
-    disp_net.load_weights('.results_stereosv/model-tf2')
+#     # point cloud test of office image of inbo.yeo 
+#     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+#     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
+#     for index in range(len(imgnamesL)):
+#         imgnameL = imgnamesL[index % len(imgnamesL)]
+#         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
 
-    # var_list = disp_net.trainable_variables
-    # var_dict = dict([(v.name.split(':')[0], v) for v in var_list])
-    # rename(var_dict)
-    # disp_net.save_weights('.results_stereosv/model-tf2')
+#         imgL = cv2.cvtColor(cv2.imread(str(imgnameL)), cv2.COLOR_BGR2RGB)
+#         imgR = cv2.cvtColor(cv2.imread(str(imgnameR)), cv2.COLOR_BGR2RGB)
+#         imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
+#         imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
 
-    # point cloud test of office image of inbo.yeo 
-    data_dir = Path('E:\\datasets\\camera_taker\\undist_fisheye')
-    imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
-    for index in range(len(imgnamesL)):
-        imgnameL = imgnamesL[index % len(imgnamesL)]
-        imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-
-        imgL = cv2.cvtColor(cv2.imread(str(imgnameL)), cv2.COLOR_BGR2RGB)
-        imgR = cv2.cvtColor(cv2.imread(str(imgnameR)), cv2.COLOR_BGR2RGB)
-        imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
-        imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
-        imgL = (imgL / 255).astype(np.float32)
-        imgR = (imgR / 255).astype(np.float32)
-
-        t0 = time.time()
-        disp0, *_ = disp_net([imgL[None], imgR[None]])
-        t1 = time.time()
-        print("* elspaed:", t1 - t0)
-        disp0 = disp0[0]
-        imshow(disp0.numpy())
-'''
+#         t0 = time.time()
+#         dispL, _ = disp_net.predict_single(imgL, imgR)
+#         t1 = time.time()
+#         print("* elspaed:", t1 - t0)
+#         imgtool.imshow(dispL.numpy())
+#         #imgtool.imshow(disp0)

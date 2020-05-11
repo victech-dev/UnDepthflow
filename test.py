@@ -9,14 +9,10 @@ import re
 from tqdm import tqdm
 import time
 
-from opt_utils import opt, autoflags
+from nets.disp_net import DispNet
+from opt_helper import opt, autoflags
+from cam_utils import query_K, rescale_K, resize_image_pairs, warp_topdown
 from pcdlib import NavScene
-from misc import write_pfm, query_K, rescale_K, resize_image_pairs, warp_topdown
-
-from eval.evaluate_flow import load_gt_flow_kitti, get_scaled_intrinsic_matrix, scale_intrinsics
-from eval.evaluate_mask import load_gt_mask
-from eval.evaluation_utils import width_to_focal
-
 
 def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
     Hs, Ws = tmap.shape[:2]
@@ -54,7 +50,7 @@ def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=2
     print(max_passage, max_passage_track)
 
 
-def predict_disp(sess, model, imgnameL, imgnameR):
+def predict_disp(disp_net, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
 
@@ -79,7 +75,7 @@ def predict_disp(sess, model, imgnameL, imgnameR):
     return imgL, pred_disp
 
 
-def predict_depth(sess, model, imgnameL, imgnameR, cat):
+def predict_depth(model, imgnameL, imgnameR, cat):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
     K, baseline = query_K(cat)
@@ -90,120 +86,103 @@ def predict_depth(sess, model, imgnameL, imgnameR, cat):
 
     # session run
     t0 = time.time()
-    pred_disp, pred_tmap = sess.run([model.pred_disp, model.pred_tmap], 
-        feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
-            model.input_K: K_fit[None], model.input_baseline: baseline[None]})
+    dispL, _ = model.predict_single(imgL_fit, imgR_fit)
+    # pred_disp, pred_tmap = sess.run([model.pred_disp, model.pred_tmap], 
+    #     feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
+    #         model.input_K: K_fit[None], model.input_baseline: baseline[None]})
     t1 = time.time()
-    pred_disp = np.squeeze(pred_disp) # [1, h, w, 1] => [h, w]
+    dispL = np.squeeze(dispL) # [h, w, 1] => [h, w]
 
     height, width = imgL.shape[:2] # original height, width
-    pred_disp = width * cv2.resize(pred_disp, (width, height))
-    depth = K[0,0] * baseline / pred_disp
+    dispL = width * cv2.resize(dispL, (width, height))
+    depth = K[0,0] * baseline / dispL
 
-    tmap = pred_tmap[0]
-    K_tmap = rescale_K(K, (640, 480), (tmap.shape[1], tmap.shape[0]))    
-    topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
-    find_passage(topdown, max_angle=30)
-    print("* elspaed:", t1 - t0)
+    # tmap = pred_tmap[0]
+    # K_tmap = rescale_K(K, (640, 480), (tmap.shape[1], tmap.shape[0]))    
+    # topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
+    # find_passage(topdown, max_angle=30)
+    # print("* elspaed:", t1 - t0)
 
-    # mark traversability to pcd image
-    img_to_show = np.copy(imgL)
-    tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
-    green = np.zeros((480, 640, 3), np.uint8)
-    green[:,:,1] = 255
-    green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
-    img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
+    # # mark traversability to pcd image
+    # img_to_show = np.copy(imgL)
+    # tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
+    # green = np.zeros((480, 640, 3), np.uint8)
+    # green[:,:,1] = 255
+    # green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
+    # img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
 
-    return img_to_show, depth, K
-
-def main(unused_argv):
-    opt.trace = '' # this should be empty because we have no output when testing
-    opt.batch_size = 1
-    opt.mode = 'stereosv'
-    opt.pretrained_model = '.results_stereosv/model-log'
-    _, Model_eval = autoflags()
-
-    with tf.device('/gpu:0'), tf.Graph().as_default():
-        print('Constructing models and inputs.')
-        with tf.variable_scope(tf.get_variable_scope()) as vs:
-            with tf.name_scope("test_model"):
-                model = Model_eval(scope=vs)
-
-        # count weights
-        var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        sizes = [np.prod(v.shape.as_list()) for v in var_list]
-        print("*** Total weight count:", np.sum(sizes))
-
-        # Create a saver.
-        saver = tf.train.Saver(max_to_keep=10)
-
-        # Make training session.
-        config = tf.ConfigProto()
-        #config.allow_soft_placement = True
-        #config.log_device_placement = False
-        config.gpu_options.allow_growth = True
-        #config.gpu_options.per_process_gpu_memory_fraction=0.6
-        sess = tf.Session(config=config)
-
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-        saver.restore(sess, opt.pretrained_model)
-
-        ''' point cloud test of office image of inbo.yeo '''
-        data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
-        imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
-        def ns_feeder(index):
-            imgnameL = imgnamesL[index % len(imgnamesL)]
-            imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-            img, depth, K = predict_depth(sess, model, str(imgnameL), str(imgnameR), cat='victech')
-            return img, np.clip(depth, 0, 30), K
-
-        ''' generate disparity map prediction '''
-        # for imgnameL in tqdm(imgnamesL):
-        #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        #     _, disp = predict_disp(sess, model, str(imgnameL), str(imgnameR))
-        #     outpath = (data_dir/'dispL'/imgnameL.stem).with_suffix('.pfm')
-        #     outpath.parent.mkdir(parents=True, exist_ok=True)
-        #     write_pfm(str(outpath), disp)
-        # exit()
-
-        ''' point cloud test of office image of kimys '''
-        # data_dir = Path('M:\\Users\\sehee\\StereoCapture_200316_1400\\seq1')
-        # imgnamesL = list(Path(data_dir).glob('*_L.jpg'))
-        # def ns_feeder(index):
-        #     imgnameL = imgnamesL[index % len(imgnamesL)]
-        #     imgnameR = (data_dir/imgnameL.stem.replace('_L', '_R')).with_suffix('.jpg')
-        #     img, depth, K = predict_depth_vicimg(sess, model, str(imgnameL), str(imgnameR))
-        #     return img, np.clip(depth, 0, 30), K
-
-        ''' point cloud test of dexter data '''
-        # #data_dir = Path('M:\\datasets\\dexter\\arch1_913')
-        # data_dir = Path('M:\\datasets\\dexter\\\KingWashLaundromat')
-        # imgnamesL = [f for f in (data_dir/'imL').glob('*.png') if not f.stem.startswith('gray')]
-        # imgnamesL = sorted(imgnamesL, key=lambda v: int(v.stem))
-        # def ns_feeder(index):
-        #     imgnameL = imgnamesL[index % len(imgnamesL)]
-        #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        #     img, depth, K = predict_depth(sess, model, str(imgnameL), str(imgnameR), cat='dexter')
-        #     return img, np.clip(depth, 0, 30), K
-
-        ''' point cloud test of RealSense data '''
-        # data_dir = Path('M:\\datasets\\realsense\\rs_1584686924\\img')
-        # idx_regex = re.compile('.*-([0-9]+)$')
-        # images = sorted(Path(data_dir).glob('rs-output-Color-*.png'), key=lambda v: int(idx_regex.search(v.stem).group(1)))
-        # def ns_feeder(index):
-        #     imgname = images[index % len(images)]
-        #     depthname = (data_dir/imgname.stem.replace('Color', 'Depth')).with_suffix('.png')
-        #     img = imgtool.imread(imgname)
-        #     depth = imgtool.imread(depthname) * 0.001
-        #     K = np.array([[613, 0, 332], [0, 613, 242], [0, 0, 1]])
-        #     K_depth = np.array([[385.345, 0, 320.409], [0, 385.345, 244.852], [0, 0, 1]])
-        #     return img, np.clip(depth, 0, 30), K_depth
-
-        scene = NavScene(ns_feeder)
-        scene.run()
-        scene.clear()
-
+    # return img_to_show, depth, K
+    return imgL, depth, K
 
 if __name__ == '__main__':
-    app.run()
+    opt.trace = '' # this should be empty because we have no output when testing
+    opt.batch_size = 1
+    opt.pretrained_model = '.results_stereosv/model-tf2'
+
+    print('Constructing models and inputs.')
+    disp_net = DispNet()
+    imgL0 = np.ones((384, 512, 3), np.uint8)
+    imgR0 = np.ones((384, 512, 3), np.uint8)
+    disp_net.predict_single(imgL0, imgR0)
+    disp_net.load_weights(opt.pretrained_model)
+
+    # count weights
+    var_list = disp_net.trainable_variables
+    sizes = [np.prod(v.shape.as_list()) for v in var_list]
+    print("*** Total weight count:", np.sum(sizes))
+
+    ''' point cloud test of office image of inbo.yeo '''
+    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+    imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
+    def ns_feeder(index):
+        imgnameL = imgnamesL[index % len(imgnamesL)]
+        imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+        img, depth, K = predict_depth(disp_net, str(imgnameL), str(imgnameR), cat='victech')
+        return img, np.clip(depth, 0, 30), K
+
+    ''' generate disparity map prediction '''
+    # for imgnameL in tqdm(imgnamesL):
+    #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+    #     _, disp = predict_disp(disp_net, str(imgnameL), str(imgnameR))
+    #     outpath = (data_dir/'dispL'/imgnameL.stem).with_suffix('.pfm')
+    #     outpath.parent.mkdir(parents=True, exist_ok=True)
+    #     write_pfm(str(outpath), disp)
+    # exit()
+
+    ''' point cloud test of office image of kimys '''
+    # data_dir = Path('M:\\Users\\sehee\\StereoCapture_200316_1400\\seq1')
+    # imgnamesL = list(Path(data_dir).glob('*_L.jpg'))
+    # def ns_feeder(index):
+    #     imgnameL = imgnamesL[index % len(imgnamesL)]
+    #     imgnameR = (data_dir/imgnameL.stem.replace('_L', '_R')).with_suffix('.jpg')
+    #     img, depth, K = predict_depth_vicimg(disp_net, str(imgnameL), str(imgnameR))
+    #     return img, np.clip(depth, 0, 30), K
+
+    ''' point cloud test of dexter data '''
+    # #data_dir = Path('M:\\datasets\\dexter\\arch1_913')
+    # data_dir = Path('M:\\datasets\\dexter\\\KingWashLaundromat')
+    # imgnamesL = [f for f in (data_dir/'imL').glob('*.png') if not f.stem.startswith('gray')]
+    # imgnamesL = sorted(imgnamesL, key=lambda v: int(v.stem))
+    # def ns_feeder(index):
+    #     imgnameL = imgnamesL[index % len(imgnamesL)]
+    #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+    #     img, depth, K = predict_depth(disp_net, str(imgnameL), str(imgnameR), cat='dexter')
+    #     return img, np.clip(depth, 0, 30), K
+
+    ''' point cloud test of RealSense data '''
+    # data_dir = Path('M:\\datasets\\realsense\\rs_1584686924\\img')
+    # idx_regex = re.compile('.*-([0-9]+)$')
+    # images = sorted(Path(data_dir).glob('rs-output-Color-*.png'), key=lambda v: int(idx_regex.search(v.stem).group(1)))
+    # def ns_feeder(index):
+    #     imgname = images[index % len(images)]
+    #     depthname = (data_dir/imgname.stem.replace('Color', 'Depth')).with_suffix('.png')
+    #     img = imgtool.imread(imgname)
+    #     depth = imgtool.imread(depthname) * 0.001
+    #     K = np.array([[613, 0, 332], [0, 613, 242], [0, 0, 1]])
+    #     K_depth = np.array([[385.345, 0, 320.409], [0, 385.345, 244.852], [0, 0, 1]])
+    #     return img, np.clip(depth, 0, 30), K_depth
+
+    scene = NavScene(ns_feeder)
+    scene.run()
+    scene.clear()
+
