@@ -6,11 +6,7 @@ import functools
 
 from opt_utils import opt
 from loss_utils import charbonnier_loss
-# #DEBUG!!!!!!
-# from collections import namedtuple
-# Options = namedtuple('Option', 'weight_decay img_height img_width loss_metric')
-# opt = Options(1e-4, 384, 512, 'l1-log')
-# #DEBUG!!!!!!
+from pcdlib import tf_populate_pcd, tf_detect_plane_xz
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _reg = tf.keras.regularizers.l2(opt.weight_decay) if isinstance(opt.weight_decay, (float, int)) else None
@@ -236,30 +232,35 @@ class DispNet(Model):
         else:
             return pred_dispL[:1] + pred_dispR[:1]
 
-    # def build_traversability_map(self, disp, K0, baseline):
-    #     '''
-    #     disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
-    #     K0: rescaled already from original size to [opt.img_width, opt.img_height]
-    #     '''
-    #     _, h1, w1, _ = tf.unstack(tf.shape(disp))
-    #     rw = tf.cast(w1, tf.float32) / opt.img_width
-    #     rh = tf.cast(h1, tf.float32) / opt.img_height
+class TraversabilityDecoder(Layer):
+    def __init__(self, neg, *args, **kwargs):
+        super(TraversabilityDecoder, self).__init__(*args, **kwargs)
 
-    #     # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
-    #     K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
-    #     K1 = K_scale[None,:,:] @ K0
+    def call(self, inputs):
+        '''
+        disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
+        K0: rescaled already from original size to [opt.img_width, opt.img_height]
+        '''
+        disp, K0, baseline = inputs
+        _, h1, w1, _ = tf.unstack(tf.shape(disp))
+        rw = tf.cast(w1, tf.float32) / opt.img_width
+        rh = tf.cast(h1, tf.float32) / opt.img_height
 
-    #     # construct point cloud
-    #     fxb = K1[:,0,0] * baseline
-    #     depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
-    #     xyz = tf_populate_pcd(depth, K1)
-    #     plane_xz = tf_detect_plane_xz(xyz)
+        # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
+        K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
+        K1 = K_scale[None,:,:] @ K0
 
-    #     # Condition 1: thresh below camera
-    #     cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
-    #     # Condition 2: y component of normal vector
-    #     cond2 = tf.cast(plane_xz > 0.85, tf.float32)
-    #     return cond1 * cond2
+        # construct point cloud
+        fxb = K1[:,0,0] * baseline
+        depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
+        xyz = tf_populate_pcd(depth, K1)
+        plane_xz = tf_detect_plane_xz(xyz)
+
+        # Condition 1: thresh below camera
+        cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+        # Condition 2: y component of normal vector
+        cond2 = tf.cast(plane_xz > 0.85, tf.float32)
+        return cond1 * cond2
 
 
 # def imshow(img, name='imshow', rgb=True, wait=True, norm=True):
