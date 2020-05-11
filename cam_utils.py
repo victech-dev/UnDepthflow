@@ -25,12 +25,28 @@ def rescale_K(K, size0, size1):
     return K_scale @ K
 
 
-def resize_image_pairs(imgL, imgR, new_size):
-    _, w0 = imgL.shape[:2]
-    w1, _ = new_size
+def resize_image_pairs(imgL, imgR, new_size, cvt_type=None, K=None):
+    h0, w0 = imgL.shape[:2]
+    w1, h1 = new_size
+
     interp = cv2.INTER_AREA if w0 > w1 else cv2.INTER_LINEAR
     imgL = cv2.resize(imgL, new_size, interpolation=interp)
     imgR = cv2.resize(imgR, new_size, interpolation=interp)
+
+    if cvt_type is not None:
+        if cvt_type in [np.float, np.float32, np.float64] and imgL.dtype in [np.uint8]:
+            imgL = (imgL / 255).astype(cvt_type)
+            imgR = (imgR / 255).astype(cvt_type)
+        elif imgL.dtype in [np.float, np.float32, np.float64] and cvt_type in [np.uint8]:
+            imgL = np.clip(imgL * 255, 0, 255).astype(cvt_type)
+            imgR = np.clip(imgR * 255, 0, 255).astype(cvt_type)
+        else:
+            raise ValueError('Invalid cvt_type')
+        
+    if K is None:
+        return imgL, imgR
+    else:
+        return imgL, imgR, rescale_K(K, (w0, h0), (w1, h1))    
     return imgL, imgR
 
 

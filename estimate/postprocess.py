@@ -1,5 +1,6 @@
-import numpy as np
 import tensorflow as tf
+from tensorflow.keras.layers import Layer
+import numpy as np
 import cv2
 from opt_helper import opt
 
@@ -74,23 +75,38 @@ def tf_detect_plane_xz(xyz):
     return (1.0 - evec_zero) * ny
 
 
-@tf.function
-def tf_tmap(disp, K, baseline):
-    '''
-    disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
-    '''
-    # construct point cloud
-    w = tf.shape(disp)[2]
-    fxb = K[:,0,0] * baseline
-    depth = fxb[:,None,None,None] / (tf.cast(w, tf.float32) * disp)
-    xyz = tf_populate_pcd(depth, K)
-    plane_xz = tf_detect_plane_xz(xyz)
+class TmapDecoder(Layer):
+    def __init__(self, disp_net, *args, **kwargs):
+        super(TmapDecoder, self).__init__(*args, **kwargs)
+        self._disp_net = disp_net
 
-    # Condition 1: thresh below camera
-    cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
-    # Condition 2: y component of normal vector
-    cond2 = tf.cast(plane_xz > 0.85, tf.float32)
-    return cond1 * cond2
+    @tf.function
+    def call(self, inputs):
+        # imgL, imgR type is uint8 of [org height, org width, 3] (= raw image read)
+        imgL, imgR, K0, baseline = inputs
+        _, h0, w0, _ = tf.unstack(tf.shape(imgL))
+
+        # decode disparity
+        disp, _ = self._disp_net([imgL, imgR], False)
+
+        # rescale intrinsic
+        _, h1, w1, _ = tf.unstack(tf.shape(disp))
+        rw = tf.cast(w1, tf.float32) / tf.cast(w0, tf.float32)
+        rh = tf.cast(h1, tf.float32) / tf.cast(h0, tf.float32)
+        K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
+        K1 = K_scale[None,:,:] @ K0
+
+        # construct point cloud
+        fxb = K1[:,0,0] * baseline
+        depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
+        xyz = tf_populate_pcd(depth, K1)
+        plane_xz = tf_detect_plane_xz(xyz)
+
+        # Condition 1: thresh below camera
+        cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+        # Condition 2: y component of normal vector
+        cond2 = tf.cast(plane_xz > 0.85, tf.float32)
+        return disp, cond1 * cond2
 
 
 def warp_topdown(img, K, elevation, fov=5, ppm=20):

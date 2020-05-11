@@ -12,7 +12,7 @@ import time
 from disp_net import DispNet
 from opt_helper import opt, autoflags
 from cam_utils import query_K, rescale_K, resize_image_pairs
-from estimate import NavScene, tf_tmap, warp_topdown
+from estimate import NavScene, TmapDecoder, warp_topdown
 
 def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
     Hs, Ws = tmap.shape[:2]
@@ -50,7 +50,7 @@ def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=2
     print(max_passage, max_passage_track)
 
 
-def predict_disp(disp_net, imgnameL, imgnameR):
+def predict_disp(model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
 
@@ -74,29 +74,26 @@ def predict_disp(disp_net, imgnameL, imgnameR):
     return imgL, dispL
 
 
-def predict_depth(model, imgnameL, imgnameR, cat):
+def predict_tmap(model, imgnameL, imgnameR, cat):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
     K, baseline = query_K(cat)
+    baseline = np.array(baseline, np.float32)
 
     # rescale to fit nn-input
-    imgL_fit, imgR_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height))
-    baseline = np.array(baseline, np.float32)
+    imgL_fit, imgR_fit, K_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32, K)
 
     # session run
     t0 = time.time()
-    dispL, _ = model.predict_single(imgL_fit, imgR_fit)
-    dispL = dispL.numpy() # normalized disparity of pyramid bottom
+    dispL, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
+    dispL = np.squeeze(dispL) # normalized disparity of pyramid bottom
+    tmap = np.squeeze(tmap)
 
-    inv_depth = np.squeeze(dispL)
-    inv_depth = width * cv2.resize(inv_depth, (width, height))
+    inv_depth = width * cv2.resize(dispL, (width, height))
     depth = K[0,0] * baseline / inv_depth
 
     K_tmap = rescale_K(K, (width, height), (dispL.shape[1], dispL.shape[0]))
-    tmap = tf_tmap(dispL[None], K_tmap[None], baseline[None])
-    tmap = np.squeeze(tmap)
-    K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))    
     topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
     find_passage(topdown, max_angle=30)
     t1 = time.time()
@@ -104,8 +101,8 @@ def predict_depth(model, imgnameL, imgnameR, cat):
 
     # mark traversability to pcd image
     img_to_show = np.copy(imgL)
-    tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
-    green = np.zeros((480, 640, 3), np.uint8)
+    tmap_enlarged = cv2.resize(tmap, (width, height), interpolation=cv2.INTER_LINEAR)
+    green = np.zeros((height, width, 3), np.uint8)
     green[:,:,1] = 255
     green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
     img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
@@ -122,12 +119,15 @@ if __name__ == '__main__':
     imgL0 = np.ones((384, 512, 3), np.uint8)
     imgR0 = np.ones((384, 512, 3), np.uint8)
     disp_net.predict_single(imgL0, imgR0)
-    disp_net.load_weights(opt.pretrained_model)
 
     # count weights
     var_list = disp_net.trainable_variables
     sizes = [np.prod(v.shape.as_list()) for v in var_list]
     print("*** Total weight count:", np.sum(sizes))
+
+    # load weights
+    disp_net.load_weights(opt.pretrained_model)
+    tmap_dec = TmapDecoder(disp_net)
 
     ''' point cloud test of office image of inbo.yeo '''
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     def ns_feeder(index):
         imgnameL = imgnamesL[index % len(imgnamesL)]
         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        img, depth, K = predict_depth(disp_net, str(imgnameL), str(imgnameR), cat='victech')
+        img, depth, K = predict_tmap(tmap_dec, str(imgnameL), str(imgnameR), cat='victech')
         return img, np.clip(depth, 0, 30), K
 
     ''' generate disparity map prediction '''
