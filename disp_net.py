@@ -202,70 +202,68 @@ class DispNet(Model):
         pred_dispL = self._pwcL(featL + featR)
         pred_dispR = self._pwcR(featR + featL)
 
-        loss = 0.0
-        if training == True:
-            dispL, dispR = inputs[2:]
-            dispL_pyr = self._scale_pyramid(dispL, 4, 2, 4)
-            dispR_pyr = self._scale_pyramid(dispR, 4, 2, 4)
-            SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
-
-            for s in range(4):
-                left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
-                right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
-                if s == 0:
-                    pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
-                    self.add_metric(pixel_error, name='epe', aggregation='mean')
-
-                if opt.loss_metric == 'l1-log': # l1 of log
-                    left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
-                    right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
-                    loss += SCALE_FACTOR[s] * tf.reduce_mean(left_error + right_error)
-                elif opt.loss_metric == 'charbonnier':
-                    loss += 0.1 * SCALE_FACTOR[s] * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
-                else:
-                    raise ValueError('! Unsupported loss metric')
-        self.add_loss(loss, inputs=True)
-            
-        if training == True:
-            return tuple()
-        else:
+        if not training == True:
             return pred_dispL[:1] + pred_dispR[:1]
 
-    @tf.function
-    def predict_single(self, imgL, imgR):
-        imgL = tf.cast(imgL, tf.float32) / 255
-        imgR = tf.cast(imgR, tf.float32) / 255
-        dispL, dispR = self([imgL[None], imgR[None]], False)
-        return dispL[0], dispR[0]
+        # loss, metric during training
+        dispL, dispR = inputs[2:]
+        dispL_pyr = self._scale_pyramid(dispL, 4, 2, 4)
+        dispR_pyr = self._scale_pyramid(dispR, 4, 2, 4)
+        SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
+
+        for s in range(4):
+            left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
+            right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
+            if s == 0:
+                pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
+                self.add_metric(pixel_error, name='epe', aggregation='mean')
+
+            if opt.loss_metric == 'l1-log': # l1 of log
+                left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
+                right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
+                loss = tf.reduce_mean(left_error + right_error)
+            elif opt.loss_metric == 'charbonnier':
+                loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
+            else:
+                raise ValueError('! Unsupported loss metric')
+            self.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
+        return tuple()
 
 
-# if __name__ == '__main__':
-#     import cv2
-#     import numpy as np
-#     from pathlib import Path
-#     import time
+@tf.function
+def pred_disp_single(model, imgL, imgR):
+    dispL, dispR = model([imgL[None], imgR[None]], False)
+    return dispL[0], dispR[0]
 
-#     disp_net = DispNet(name='depth_net')
-#     imgL0 = np.ones((384, 512, 3), np.uint8)
-#     imgR0 = np.ones((384, 512, 3), np.uint8)
-#     disp_net.predict_single(imgL0, imgR0)
-#     disp_net.load_weights('.results_stereosv/model-tf2')
 
-#     # point cloud test of office image of inbo.yeo 
-#     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
-#     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
-#     for index in range(len(imgnamesL)):
-#         imgnameL = imgnamesL[index % len(imgnamesL)]
-#         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+if __name__ == '__main__':
+    import cv2
+    import numpy as np
+    from pathlib import Path
+    import time
+    import imgtool
+    from cam_utils import resize_image_pairs
 
-#         imgL = cv2.cvtColor(cv2.imread(str(imgnameL)), cv2.COLOR_BGR2RGB)
-#         imgR = cv2.cvtColor(cv2.imread(str(imgnameR)), cv2.COLOR_BGR2RGB)
-#         imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
-#         imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_LINEAR)
+    disp_net = DispNet(name='depth_net')
+    imgL0 = np.ones((384, 512, 3), np.float32)
+    imgR0 = np.ones((384, 512, 3), np.float32)
+    pred_disp_single(disp_net, imgL0, imgR0)
+    disp_net.load_weights('.results_stereosv/model-tf2')
 
-#         t0 = time.time()
-#         dispL, _ = disp_net.predict_single(imgL, imgR)
-#         t1 = time.time()
-#         print("* elspaed:", t1 - t0)
-#         imgtool.imshow(dispL.numpy())
-#         #imgtool.imshow(disp0)
+    # point cloud test of office image of inbo.yeo 
+    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+    imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
+    for index in range(len(imgnamesL)):
+        imgnameL = imgnamesL[index % len(imgnamesL)]
+        imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
+
+        imgL = imgtool.imread(str(imgnameL))
+        imgR = imgtool.imread(str(imgnameR))
+        imgL, imgR = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
+
+        t0 = time.time()
+        dispL, _ = pred_disp_single(disp_net, imgL, imgR)
+        t1 = time.time()
+        print("* elspaed:", t1 - t0)
+        imgtool.imshow(dispL.numpy())
+        #imgtool.imshow(disp0)

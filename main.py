@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 from opt_helper import opt, autoflags
-from nets.disp_net import DispNet
+from disp_net import DispNet
 from dataloader import batch_from_dataset
 
 STEPS_PER_EPOCH = 10000

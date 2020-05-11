@@ -98,7 +98,8 @@ class TmapDecoder(Layer):
 
         # construct point cloud
         fxb = K1[:,0,0] * baseline
-        depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
+        disp = tf.cast(w1, tf.float32) * tf.maximum(disp, 1e-6)
+        depth = fxb[:,None,None,None] / disp
         xyz = tf_populate_pcd(depth, K1)
         plane_xz = tf_detect_plane_xz(xyz)
 
@@ -106,7 +107,7 @@ class TmapDecoder(Layer):
         cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
         # Condition 2: y component of normal vector
         cond2 = tf.cast(plane_xz > 0.85, tf.float32)
-        return disp, cond1 * cond2
+        return depth, cond1 * cond2
 
 
 def warp_topdown(img, K, elevation, fov=5, ppm=20):

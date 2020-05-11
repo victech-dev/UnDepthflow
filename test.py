@@ -9,7 +9,7 @@ import re
 from tqdm import tqdm
 import time
 
-from disp_net import DispNet
+from disp_net import DispNet, pred_disp_single
 from opt_helper import opt, autoflags
 from cam_utils import query_K, rescale_K, resize_image_pairs
 from estimate import NavScene, TmapDecoder, warp_topdown
@@ -86,14 +86,11 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
 
     # session run
     t0 = time.time()
-    dispL, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
-    dispL = np.squeeze(dispL) # normalized disparity of pyramid bottom
+    depth, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
+    depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
 
-    inv_depth = width * cv2.resize(dispL, (width, height))
-    depth = K[0,0] * baseline / inv_depth
-
-    K_tmap = rescale_K(K, (width, height), (dispL.shape[1], dispL.shape[0]))
+    K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
     topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
     find_passage(topdown, max_angle=30)
     t1 = time.time()
@@ -116,9 +113,9 @@ if __name__ == '__main__':
 
     print('Constructing models and inputs.')
     disp_net = DispNet()
-    imgL0 = np.ones((384, 512, 3), np.uint8)
-    imgR0 = np.ones((384, 512, 3), np.uint8)
-    disp_net.predict_single(imgL0, imgR0)
+    imgL0 = np.ones((384, 512, 3), np.float32)
+    imgR0 = np.ones((384, 512, 3), np.float32)
+    pred_disp_single(disp_net, imgL0, imgR0)
 
     # count weights
     var_list = disp_net.trainable_variables
