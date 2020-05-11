@@ -6,7 +6,6 @@ import functools
 
 from opt_helper import opt
 from loss_utils import charbonnier_loss
-from pcdlib import tf_populate_pcd, tf_detect_plane_xz
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
@@ -238,37 +237,6 @@ class DispNet(Model):
         imgR = tf.cast(imgR, tf.float32) / 255
         dispL, dispR = self([imgL[None], imgR[None]], False)
         return dispL[0], dispR[0]
-
-
-class TraversabilityDecoder(Layer):
-    def __init__(self, neg, *args, **kwargs):
-        super(TraversabilityDecoder, self).__init__(*args, **kwargs)
-
-    def call(self, inputs):
-        '''
-        disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
-        K0: rescaled already from original size to [opt.img_width, opt.img_height]
-        '''
-        disp, K0, baseline = inputs
-        _, h1, w1, _ = tf.unstack(tf.shape(disp))
-        rw = tf.cast(w1, tf.float32) / opt.img_width
-        rh = tf.cast(h1, tf.float32) / opt.img_height
-
-        # rescale intrinsic (note K should be rescaled already from original size to [opt.img_width, opt.img_height])
-        K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
-        K1 = K_scale[None,:,:] @ K0
-
-        # construct point cloud
-        fxb = K1[:,0,0] * baseline
-        depth = fxb[:,None,None,None] / (tf.cast(w1, tf.float32) * disp)
-        xyz = tf_populate_pcd(depth, K1)
-        plane_xz = tf_detect_plane_xz(xyz)
-
-        # Condition 1: thresh below camera
-        cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
-        # Condition 2: y component of normal vector
-        cond2 = tf.cast(plane_xz > 0.85, tf.float32)
-        return cond1 * cond2
 
 
 # if __name__ == '__main__':

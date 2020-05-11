@@ -9,10 +9,10 @@ import re
 from tqdm import tqdm
 import time
 
-from nets.disp_net import DispNet
+from disp_net import DispNet
 from opt_helper import opt, autoflags
-from cam_utils import query_K, rescale_K, resize_image_pairs, warp_topdown
-from pcdlib import NavScene
+from cam_utils import query_K, rescale_K, resize_image_pairs
+from estimate import NavScene, tf_tmap, warp_topdown
 
 def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
     Hs, Ws = tmap.shape[:2]
@@ -66,53 +66,51 @@ def predict_disp(disp_net, imgnameL, imgnameR):
     imgL_fit = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     imgR_fit = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
 
-    pred_disp = sess.run(model.pred_disp, 
-        feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None]})
-    pred_disp = np.squeeze(pred_disp) # [1, h, w, 1] => [h, w]
+    dispL, _ = model.predict_single(imgL_fit, imgR_fit)
+    dispL = np.squeeze(dispL) # [h, w, 1] => [h, w]
 
     height, width = imgL.shape[:2] # original height, width
-    pred_disp = width * cv2.resize(pred_disp, (width, height))
-    return imgL, pred_disp
+    dispL = width * cv2.resize(dispL, (width, height))
+    return imgL, dispL
 
 
 def predict_depth(model, imgnameL, imgnameR, cat):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
+    height, width = imgL.shape[:2] # original height, width
     K, baseline = query_K(cat)
 
     # rescale to fit nn-input
-    imgL_fit, imgR_fit, K_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), K=K)
+    imgL_fit, imgR_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height))
     baseline = np.array(baseline, np.float32)
 
     # session run
     t0 = time.time()
     dispL, _ = model.predict_single(imgL_fit, imgR_fit)
-    # pred_disp, pred_tmap = sess.run([model.pred_disp, model.pred_tmap], 
-    #     feed_dict={model.input_L: imgL_fit[None], model.input_R: imgR_fit[None], 
-    #         model.input_K: K_fit[None], model.input_baseline: baseline[None]})
+    dispL = dispL.numpy() # normalized disparity of pyramid bottom
+
+    inv_depth = np.squeeze(dispL)
+    inv_depth = width * cv2.resize(inv_depth, (width, height))
+    depth = K[0,0] * baseline / inv_depth
+
+    K_tmap = rescale_K(K, (width, height), (dispL.shape[1], dispL.shape[0]))
+    tmap = tf_tmap(dispL[None], K_tmap[None], baseline[None])
+    tmap = np.squeeze(tmap)
+    K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))    
+    topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
+    find_passage(topdown, max_angle=30)
     t1 = time.time()
-    dispL = np.squeeze(dispL) # [h, w, 1] => [h, w]
+    print("* elspaed:", t1 - t0)
 
-    height, width = imgL.shape[:2] # original height, width
-    dispL = width * cv2.resize(dispL, (width, height))
-    depth = K[0,0] * baseline / dispL
+    # mark traversability to pcd image
+    img_to_show = np.copy(imgL)
+    tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
+    green = np.zeros((480, 640, 3), np.uint8)
+    green[:,:,1] = 255
+    green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
+    img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
 
-    # tmap = pred_tmap[0]
-    # K_tmap = rescale_K(K, (640, 480), (tmap.shape[1], tmap.shape[0]))    
-    # topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
-    # find_passage(topdown, max_angle=30)
-    # print("* elspaed:", t1 - t0)
-
-    # # mark traversability to pcd image
-    # img_to_show = np.copy(imgL)
-    # tmap_enlarged = cv2.resize(tmap, (640, 480), interpolation=cv2.INTER_LINEAR)
-    # green = np.zeros((480, 640, 3), np.uint8)
-    # green[:,:,1] = 255
-    # green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
-    # img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
-
-    # return img_to_show, depth, K
-    return imgL, depth, K
+    return img_to_show, depth, K
 
 if __name__ == '__main__':
     opt.trace = '' # this should be empty because we have no output when testing

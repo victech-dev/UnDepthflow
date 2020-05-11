@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+import cv2
+from opt_helper import opt
 
 
 def tf_populate_pcd(depth, K):
@@ -70,3 +72,48 @@ def tf_detect_plane_xz(xyz):
     ny_num = tf.sqrt(tf.maximum(ny2_num, 0))
     ny = tf.clip_by_value(ny_num / tf.maximum(denom, 1e-6), 0, 1)
     return (1.0 - evec_zero) * ny
+
+
+@tf.function
+def tf_tmap(disp, K, baseline):
+    '''
+    disp: normalized disparity of shape [B, H//4, W//4, 1] (bottom of pyramid)
+    '''
+    # construct point cloud
+    w = tf.shape(disp)[2]
+    fxb = K[:,0,0] * baseline
+    depth = fxb[:,None,None,None] / (tf.cast(w, tf.float32) * disp)
+    xyz = tf_populate_pcd(depth, K)
+    plane_xz = tf_detect_plane_xz(xyz)
+
+    # Condition 1: thresh below camera
+    cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+    # Condition 2: y component of normal vector
+    cond2 = tf.cast(plane_xz > 0.85, tf.float32)
+    return cond1 * cond2
+
+
+def warp_topdown(img, K, elevation, fov=5, ppm=20):
+    '''
+    img: image to warp
+    K: camera intrinsic
+    elevation: elevation of floor w.r.t the camera (= camera height from floor)
+    fov: field of view as meter
+    ppm: pixel per meter, new image size = (2* fov * ppm, fov * ppm)
+    '''
+    fy, cy = K[1,1], K[1,2]
+    z_front = fy * elevation / (img.shape[0] - cy)
+    src = np.zeros((4, 3), np.float32)
+    
+    src[0] = [-fov, elevation, z_front+fov]
+    src[1] = [fov, elevation, z_front+fov]
+    src[2] = [-fov, elevation, z_front]
+    src[3] = [fov, elevation, z_front]
+    src = src @ K.T
+    src /= src[:,2:]
+    
+    H,W = int(fov * ppm), int(2 * fov * ppm)
+    dst = np.array([[0, 0], [W-1, 0], [0, H-1], [W-1, H-1]], np.float32)
+    tfm = cv2.getPerspectiveTransform(src[:,None,:-1], dst[:,None,:])
+    return cv2.warpPerspective(img, tfm, (W,H))
+
