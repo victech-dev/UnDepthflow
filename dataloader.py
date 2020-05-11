@@ -156,6 +156,12 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
 
     dispL = cv2.resize(dispL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
     dispR = cv2.resize(dispR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
+
+    # random flip left/right
+    if np.random.randint(2) > 0:
+        imgL, imgR = np.fliplr(imgR), np.fliplr(imgL)
+        dispL, dispR = np.fliplr(dispR), np.fliplr(dispL)
+
     return imgL, imgR, np.atleast_3d(dispL), np.atleast_3d(dispR)
 
 def batch_from_dataset():
