@@ -79,8 +79,8 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
     imgL = imgtool.imread(imgL_path)
     imgR = imgtool.imread(imgR_path)
-    dispL, _ = imgtool.read_pfm(dispL_path)
-    dispR, _ = imgtool.read_pfm(dispR_path)
+    dispL = imgtool.imread(dispL_path)
+    dispR = imgtool.imread(dispR_path)
     H, W = imgL.shape[:2]
 
     # hue shift
