@@ -10,17 +10,6 @@ from dataloader import batch_from_dataset
 STEPS_PER_EPOCH = 10000
 EPOCHS = opt.num_iterations // STEPS_PER_EPOCH
 
-def lr_scheduler(epoch):
-    lr = opt.learning_rate
-    if isinstance(lr, (float, int)):
-        return float(lr)
-    elif isinstance(lr, (list, tuple)):
-        t = epoch / (EPOCHS - 1)
-        lr_max, lr_min = map(float, lr)
-        return lr_min + 0.5 * (lr_max - lr_min) * (1 + np.cos(t * np.pi))
-    else:
-        raise ValueError('Invalid learning rate')
-
 if __name__ == '__main__':
     autoflags()
     if opt.trace == "":
@@ -30,12 +19,17 @@ if __name__ == '__main__':
     print('* Number of devices: ', strategy.num_replicas_in_sync)
     with strategy.scope():
         model = DispNet()
-        model.compile(optimizer=tf.keras.optimizers.Adam())
+        # Cosine annealing lr if required
+        if isinstance(opt.learning_rate, (list, tuple)):
+            lr = list(map(float, opt.learning_rate))
+            lr = tf.keras.experimental.CosineDecay(lr[0], opt.num_iterations, alpha=lr[1]/lr[0])
+        else:
+            lr = float(opt.learning_rate)
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
 
     callbacks = []
-    callbacks.append(LearningRateScheduler(lr_scheduler))
     callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}'), save_weights_only=True, save_best_only=False))
     callbacks.append(TensorBoard(log_dir=opt.trace, update_freq=100))
 
     ds_trn = batch_from_dataset()
-    model.fit(x=ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)
+    model.fit(ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)

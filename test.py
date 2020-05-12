@@ -9,50 +9,16 @@ import re
 from tqdm import tqdm
 import time
 
-from disp_net import DispNet, pred_disp_single
+from disp_net import DispNet
 from opt_helper import opt, autoflags
 from cam_utils import query_K, rescale_K, resize_image_pairs
-from estimate import NavScene, TmapDecoder, warp_topdown
-
-def find_passage(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
-    Hs, Ws = tmap.shape[:2]
-    Wd, Hd = (int(search_range[0] * ppm), int(search_range[1] * ppm))
-    xc, y1 = 0.5*(Ws-1), Hs-1 # bottom center coord of tmap
-    x0 = xc - 0.5 * search_range[0] * ppm # left
-    x1 = xc + 0.5 * search_range[0] * ppm # right
-    y0 = y1 - search_range[1] * ppm # top
-    src_pts = np.float32([[x0, y0], [x0, y1], [x1, y1]])
-
-    ksize = int(passage_width * ppm)
-    kernel_1d = np.sin(np.linspace(0, np.pi, ksize))
-
-    max_passage = -1
-    max_passage_track = (0, 0)
-    for angle in np.linspace(-max_angle, max_angle, 30):
-        rot = np.deg2rad(angle)
-        dst_pts = np.float32([[(Hd-1)*np.tan(rot),0], [0,Hd-1], [Wd-1, Hd-1]])
-        tfm = cv2.getAffineTransform(src_pts, dst_pts)
-        w = cv2.warpAffine(tmap, tfm, (Wd, Hd))
-        w_1d = np.sum(w, axis=0) # [H,W] => [W]
-        est_passage = np.correlate(w_1d, kernel_1d, mode='valid')
-        max_idx = np.argmax(est_passage)
-        if est_passage[max_idx] > max_passage:
-            max_passage = est_passage[max_idx]
-            max_passage_track = ((max_idx - 0.5 * (Wd-ksize)) / ppm, angle)
-
-    # display guide
-    offset, angle = max_passage_track
-    row0, col0 = y1, xc + offset*ppm
-    row1, col1 = y0, xc + offset*ppm + (Hd-1) * np.tan(-np.deg2rad(angle))
-    guide = cv2.cvtColor(cv2.convertScaleAbs(tmap, alpha=255), cv2.COLOR_GRAY2RGB)
-    cv2.line(guide, (int(col0), int(row0)), (int(col1), int(row1)), (0,255,0), thickness=3)            
-    imgtool.imshow(guide, wait=False)
-    print(max_passage, max_passage_track)
+from estimate import NavScene, TmapDecoder, warp_topdown, get_visual_odometry
 
 
 def predict_disp(model, imgnameL, imgnameR):
     imgL = imgtool.imread(imgnameL)
     imgR = imgtool.imread(imgnameR)
+    height, width = imgL.shape[:2] # original height, width
 
     # denoising?
     # imgL = cv2.blur(imgL, ksize=(3,3))
@@ -63,13 +29,9 @@ def predict_disp(model, imgnameL, imgnameR):
     # imgR = cv2.bilateralFilter(imgR, 11, 17, 17)
 
     # session run
-    imgL_fit = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    imgR_fit = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-
+    imgL_fit, imgR_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
     dispL, _ = model.predict_single(imgL_fit, imgR_fit)
-    dispL = np.squeeze(dispL) # [h, w, 1] => [h, w]
-
-    height, width = imgL.shape[:2] # original height, width
+    dispL = np.squeeze(dispL) # [h, w]
     dispL = width * cv2.resize(dispL, (width, height))
     return imgL, dispL
 
@@ -84,15 +46,14 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
     # rescale to fit nn-input
     imgL_fit, imgR_fit, K_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32, K)
 
-    # session run
+    # calculate cte/ye
     t0 = time.time()
     depth, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
     depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
-
     K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
     topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
-    find_passage(topdown, max_angle=30)
+    cte, ye = get_visual_odometry(topdown, max_angle=30)
     t1 = time.time()
     print("* elspaed:", t1 - t0)
 
@@ -107,22 +68,13 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
     return img_to_show, depth, K
 
 if __name__ == '__main__':
+    autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
     opt.pretrained_model = '.results_stereosv/model-tf2'
 
-    print('Constructing models and inputs.')
+    print('* Restoring model')
     disp_net = DispNet()
-    imgL0 = np.ones((384, 512, 3), np.float32)
-    imgR0 = np.ones((384, 512, 3), np.float32)
-    pred_disp_single(disp_net, imgL0, imgR0)
-
-    # count weights
-    var_list = disp_net.trainable_variables
-    sizes = [np.prod(v.shape.as_list()) for v in var_list]
-    print("*** Total weight count:", np.sum(sizes))
-
-    # load weights
     disp_net.load_weights(opt.pretrained_model)
     tmap_dec = TmapDecoder(disp_net)
 

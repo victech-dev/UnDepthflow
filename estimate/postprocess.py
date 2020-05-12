@@ -75,6 +75,7 @@ def tf_detect_plane_xz(xyz):
     return (1.0 - evec_zero) * ny
 
 
+''' Traversability map decoder '''
 class TmapDecoder(Layer):
     def __init__(self, disp_net, *args, **kwargs):
         super(TmapDecoder, self).__init__(*args, **kwargs)
@@ -82,7 +83,7 @@ class TmapDecoder(Layer):
 
     @tf.function
     def call(self, inputs):
-        # imgL, imgR type is uint8 of [org height, org width, 3] (= raw image read)
+        # Note K0 should already be scaled from original image size to nn-input size 
         imgL, imgR, K0, baseline = inputs
         _, h0, w0, _ = tf.unstack(tf.shape(imgL))
 
@@ -101,6 +102,8 @@ class TmapDecoder(Layer):
         disp = tf.cast(w1, tf.float32) * tf.maximum(disp, 1e-6)
         depth = fxb[:,None,None,None] / disp
         xyz = tf_populate_pcd(depth, K1)
+
+        # detect xz-plane from pcd
         plane_xz = tf_detect_plane_xz(xyz)
 
         # Condition 1: thresh below camera
@@ -134,3 +137,41 @@ def warp_topdown(img, K, elevation, fov=5, ppm=20):
     tfm = cv2.getPerspectiveTransform(src[:,None,:-1], dst[:,None,:])
     return cv2.warpPerspective(img, tfm, (W,H))
 
+
+def get_visual_odometry(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
+    Hs, Ws = tmap.shape[:2]
+    Wd, Hd = (int(search_range[0] * ppm), int(search_range[1] * ppm))
+    xc, y1 = 0.5*(Ws-1), Hs-1 # bottom center coord of tmap
+    x0 = xc - 0.5 * search_range[0] * ppm # left
+    x1 = xc + 0.5 * search_range[0] * ppm # right
+    y0 = y1 - search_range[1] * ppm # top
+    src_pts = np.float32([[x0, y0], [x0, y1], [x1, y1]])
+
+    ksize = int(passage_width * ppm)
+    kernel_1d = np.sin(np.linspace(0, np.pi, ksize))
+
+    tmax = -1
+    offset0, angle0 = 0, 0
+    for angle in np.linspace(-max_angle, max_angle, 30):
+        rot = np.deg2rad(angle)
+        dst_pts = np.float32([[(Hd-1)*np.tan(rot),0], [0,Hd-1], [Wd-1, Hd-1]])
+        tfm = cv2.getAffineTransform(src_pts, dst_pts)
+        w = cv2.warpAffine(tmap, tfm, (Wd, Hd))
+        w_1d = np.sum(w, axis=0) # [H,W] => [W]
+        est_passage = np.correlate(w_1d, kernel_1d, mode='valid')
+        max_idx = np.argmax(est_passage)
+        if est_passage[max_idx] > tmax:
+            tmax = est_passage[max_idx]
+            offset0 = (max_idx - 0.5 * (Wd-ksize)) / ppm
+            angle0 = angle
+
+    return offset0, angle0
+
+    # # display guide
+    # offset, angle = max_passage_track
+    # row0, col0 = y1, xc + offset*ppm
+    # row1, col1 = y0, xc + offset*ppm + (Hd-1) * np.tan(-np.deg2rad(angle))
+    # guide = cv2.cvtColor(cv2.convertScaleAbs(tmap, alpha=255), cv2.COLOR_GRAY2RGB)
+    # cv2.line(guide, (int(col0), int(row0)), (int(col1), int(row1)), (0,255,0), thickness=3)
+    # imgtool.imshow(guide, wait=False)
+    # print(max_passage, max_passage_track)

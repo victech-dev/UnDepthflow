@@ -35,9 +35,9 @@ class FeaturePyramid(Layer):
         return x[2], x[4], x[6], x[8], x[10], x[12]
 
 
-class DispDecoder(Layer):
+class FlowDecoder(Layer):
     def __init__(self, *args, **kwargs):
-        super(DispDecoder, self).__init__(*args, **kwargs)
+        super(FlowDecoder, self).__init__(*args, **kwargs)
         self._cnv1 = _conv2d(128, 3, 1, name=f'cnv1')
         self._cnv2 = _conv2d(128, 3, 1, name=f'cnv2')
         self._cnv3 = _conv2d(96, 3, 1, name=f'cnv3')
@@ -82,11 +82,11 @@ class PwcNet_Single(Layer):
         super(PwcNet_Single, self).__init__(*args, **kwargs)
         self.neg = neg
         self._cn = ContextNet(name='cn')
-        self._dec2 = DispDecoder(name='dec2')
-        self._dec3 = DispDecoder(name='dec3')
-        self._dec4 = DispDecoder(name='dec4')
-        self._dec5 = DispDecoder(name='dec5')
-        self._dec6 = DispDecoder(name='dec6')
+        self._dec2 = FlowDecoder(name='dec2')
+        self._dec3 = FlowDecoder(name='dec3')
+        self._dec4 = FlowDecoder(name='dec4')
+        self._dec5 = FlowDecoder(name='dec5')
+        self._dec6 = FlowDecoder(name='dec6')
 
     @staticmethod
     def _cost_volumn(feature1, feature2, d=4):
@@ -202,7 +202,7 @@ class DispNet(Model):
         pred_dispL = self._pwcL(featL + featR)
         pred_dispR = self._pwcR(featR + featL)
 
-        if not training == True:
+        if training != True:
             return pred_dispL[:1] + pred_dispR[:1]
 
         # loss, metric during training
@@ -229,11 +229,10 @@ class DispNet(Model):
             self.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
         return tuple()
 
-
-@tf.function
-def pred_disp_single(model, imgL, imgR):
-    dispL, dispR = model([imgL[None], imgR[None]], False)
-    return dispL[0], dispR[0]
+    @tf.function
+    def predict_single(self, imgL, imgR):
+        dispL, dispR = self([imgL[None], imgR[None]], False)
+        return dispL[0], dispR[0]
 
 
 if __name__ == '__main__':
@@ -244,12 +243,9 @@ if __name__ == '__main__':
     import imgtool
     from cam_utils import resize_image_pairs
 
-    disp_net = DispNet(name='depth_net')
-    imgL0 = np.ones((384, 512, 3), np.float32)
-    imgR0 = np.ones((384, 512, 3), np.float32)
-    pred_disp_single(disp_net, imgL0, imgR0)
+    disp_net = DispNet()
     disp_net.load_weights('.results_stereosv/model-tf2')
-
+ 
     # point cloud test of office image of inbo.yeo 
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
@@ -262,7 +258,7 @@ if __name__ == '__main__':
         imgL, imgR = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
 
         t0 = time.time()
-        dispL, _ = pred_disp_single(disp_net, imgL, imgR)
+        dispL, _ = disp_net.predict_single(imgL, imgR)
         t1 = time.time()
         print("* elspaed:", t1 - t0)
         imgtool.imshow(dispL.numpy())
