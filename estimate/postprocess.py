@@ -121,24 +121,27 @@ def warp_topdown(img, K, elevation, fov=5, ppm=20):
     fov: field of view as meter
     ppm: pixel per meter, new image size = (2* fov * ppm, fov * ppm)
     '''
+    # let zn = z [n]ear = minimum z among floor pixels (elevation below camera)
+    # this can be calculated from eq K * [0 elevation zn].T = zn * [0 imgH-1 1].T
     fy, cy = K[1,1], K[1,2]
-    z_front = fy * elevation / (img.shape[0] - cy)
+    zn = fy * elevation / (img.shape[0] - 1 - cy)
+
     src = np.zeros((4, 3), np.float32)
-    
-    src[0] = [-fov, elevation, z_front+fov]
-    src[1] = [fov, elevation, z_front+fov]
-    src[2] = [-fov, elevation, z_front]
-    src[3] = [fov, elevation, z_front]
+    src[0] = [-fov, elevation, zn + fov]
+    src[1] = [fov, elevation, zn + fov]
+    src[2] = [-fov, elevation, zn]
+    src[3] = [fov, elevation, zn]
     src = src @ K.T
     src /= src[:,2:]
     
     H,W = int(fov * ppm), int(2 * fov * ppm)
     dst = np.array([[0, 0], [W-1, 0], [0, H-1], [W-1, H-1]], np.float32)
     tfm = cv2.getPerspectiveTransform(src[:,None,:-1], dst[:,None,:])
-    return cv2.warpPerspective(img, tfm, (W,H))
+    return cv2.warpPerspective(img, tfm, (W,H)), zn
 
 
-def get_visual_odometry(tmap, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
+def get_visual_odometry(tmap, zn, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
+    ''' tmap: topdown of original traversibility map '''
     Hs, Ws = tmap.shape[:2]
     Wd, Hd = (int(search_range[0] * ppm), int(search_range[1] * ppm))
     xc, y1 = 0.5*(Ws-1), Hs-1 # bottom center coord of tmap
@@ -150,28 +153,44 @@ def get_visual_odometry(tmap, max_angle=30, search_range=(2, 2), passage_width=1
     ksize = int(passage_width * ppm)
     kernel_1d = np.sin(np.linspace(0, np.pi, ksize))
 
-    tmax = -1
-    offset0, angle0 = 0, 0
-    for angle in np.linspace(-max_angle, max_angle, 30):
+    # generate correlation map (rows for different angle, cols for different offset)
+    angle_res = 30
+    corr = np.zeros((angle_res, Wd - ksize + 1), np.float32)
+    for i, angle in enumerate(np.linspace(-max_angle, max_angle, angle_res)):
         rot = np.deg2rad(angle)
         dst_pts = np.float32([[(Hd-1)*np.tan(rot),0], [0,Hd-1], [Wd-1, Hd-1]])
         tfm = cv2.getAffineTransform(src_pts, dst_pts)
         w = cv2.warpAffine(tmap, tfm, (Wd, Hd))
         w_1d = np.sum(w, axis=0) # [H,W] => [W]
-        est_passage = np.correlate(w_1d, kernel_1d, mode='valid')
-        max_idx = np.argmax(est_passage)
-        if est_passage[max_idx] > tmax:
-            tmax = est_passage[max_idx]
-            offset0 = (max_idx - 0.5 * (Wd-ksize)) / ppm
-            angle0 = angle
+        corr[i] = np.correlate(w_1d, kernel_1d, mode='valid')
 
-    return offset0, angle0
+    _, _, _, (xi, yi) = cv2.minMaxLoc(corr)
+    offset = (xi - 0.5 * (Wd - ksize)) / ppm
+    angle = 2 * max_angle * (yi / (angle_res - 1)) - max_angle
 
-    # # display guide
-    # offset, angle = max_passage_track
-    # row0, col0 = y1, xc + offset*ppm
-    # row1, col1 = y0, xc + offset*ppm + (Hd-1) * np.tan(-np.deg2rad(angle))
-    # guide = cv2.cvtColor(cv2.convertScaleAbs(tmap, alpha=255), cv2.COLOR_GRAY2RGB)
-    # cv2.line(guide, (int(col0), int(row0)), (int(col1), int(row1)), (0,255,0), thickness=3)
-    # imgtool.imshow(guide, wait=False)
-    # print(max_passage, max_passage_track)
+    # convert offset/angle to cte/yaw error
+    cam_pos = (-offset, -zn)
+    ye = np.deg2rad(angle)
+    cte = np.cos(-ye) * cam_pos[0] - np.sin(-ye) * cam_pos[1]
+    return cte, ye
+
+
+def get_minimap(tmap, zn, cte, ye, ppm=20):        
+    Hs, Ws = tmap.shape[:2]
+    pad_bottom = int(np.ceil(zn * ppm))
+    mm = cv2.copyMakeBorder(tmap, 0, pad_bottom, 0, 0, cv2.BORDER_CONSTANT)
+    mm = cv2.convertScaleAbs(mm, alpha=255)
+    mm = cv2.cvtColor(mm, cv2.COLOR_GRAY2RGB)
+    def _l2m(wpt): # convert [l]ocal xz position to [m]inimap pixel location
+        x = 0.5 * (Ws - 1) + wpt[0] * ppm
+        y = Hs - 1 + zn * ppm - wpt[1] * ppm
+        return (int(round(x)), int(round(y)))
+    # show robot pos
+    cv2.circle(mm, _l2m([0,0]), 3, (255, 255, 0), -1)
+    # show track line
+    rot = np.array([[np.cos(ye), -np.sin(ye)], [np.sin(ye), np.cos(ye)]])
+    pt0 = [-cte, 0] @ rot.T
+    pt1 = [-cte, zn + 4] @ rot.T
+    cv2.line(mm, _l2m(pt0), _l2m(pt1), (0,255,0), thickness=1)
+    return mm
+

@@ -12,7 +12,7 @@ import time
 from disp_net import DispNet
 from opt_helper import opt, autoflags
 from cam_utils import query_K, rescale_K, resize_image_pairs
-from estimate import NavScene, TmapDecoder, warp_topdown, get_visual_odometry
+from estimate import NavScene, TmapDecoder, warp_topdown, get_visual_odometry, get_minimap
 
 
 def predict_disp(model, imgnameL, imgnameR):
@@ -52,18 +52,20 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
     depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
     K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
-    topdown = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
-    cte, ye = get_visual_odometry(topdown, max_angle=30)
+    topdown, zn = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
+    cte, ye = get_visual_odometry(topdown, zn, max_angle=30)
     t1 = time.time()
-    print("* elspaed:", t1 - t0)
+    print("* elspaed:", Path(imgnameL).stem, t1 - t0, "cte:", cte, "ye:", ye)
+
+    # display guide
+    minimap = get_minimap(topdown, zn, cte, ye)
+    imgtool.imshow(minimap, wait=False)
 
     # mark traversability to pcd image
-    img_to_show = np.copy(imgL)
-    tmap_enlarged = cv2.resize(tmap, (width, height), interpolation=cv2.INTER_LINEAR)
-    green = np.zeros((height, width, 3), np.uint8)
-    green[:,:,1] = 255
-    green = cv2.addWeighted(green, 0.5, img_to_show, 0.5, 0.0)
-    img_to_show[tmap_enlarged > 0.5] = green[tmap_enlarged > 0.5]
+    green = np.full((height, width, 3), (0, 255, 0), np.uint8)
+    tmap_enlarged = cv2.resize(tmap, (width, height), interpolation=cv2.INTER_NEAREST)
+    alpha = np.atleast_3d(1 - 0.5 * tmap_enlarged)
+    img_to_show = np.clip(imgL * alpha + green * (1 - alpha), 0, 255).astype(np.uint8)
 
     return img_to_show, depth, K
 

@@ -1,7 +1,5 @@
 import numpy as np
 import cv2
-import sys
-import re
 
 def imread(name):
     # using opencv api, but returned format is RGB not BGR
