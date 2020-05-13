@@ -57,7 +57,7 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
     t1 = time.time()
     print("* elspaed:", Path(imgnameL).stem, t1 - t0, "cte:", cte, "ye:", ye)
 
-    # display guide
+    # display minimap
     minimap = get_minimap(topdown, zn, cte, ye)
     imgtool.imshow(minimap, wait=False)
 
