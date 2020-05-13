@@ -1,7 +1,7 @@
 import tensorflow as tf
 import re
 import numpy as np
-import imgtool
+import utils
 import cv2
 import functools
 from opt_helper import opt, autoflags
@@ -77,10 +77,10 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
     dispR_path = dispR_path.numpy().decode()
 
     # note cv2.imread with IMREAD_COLOR would return 3-channels image (without alpha channel)
-    imgL = imgtool.imread(imgL_path)
-    imgR = imgtool.imread(imgR_path)
-    dispL = imgtool.imread(dispL_path)
-    dispR = imgtool.imread(dispR_path)
+    imgL = utils.imread(imgL_path)
+    imgR = utils.imread(imgR_path)
+    dispL = utils.imread(dispL_path)
+    dispR = utils.imread(dispR_path)
     H, W = imgL.shape[:2]
 
     # hue shift
@@ -222,6 +222,6 @@ if __name__ == '__main__':
         disp = cv2.normalize(disp, None, 0, 1, cv2.NORM_MINMAX)
         disp = cv2.convertScaleAbs(disp, alpha=255)
         tiled[H:] = np.atleast_3d(disp)
-        imgtool.imshow(tiled)
+        utils.imshow(tiled)
 
 

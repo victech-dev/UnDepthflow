@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 import numpy as np
-import imgtool
+import utils
 import cv2
 import open3d as o3d
 from pathlib import Path
@@ -11,13 +11,12 @@ import time
 
 from disp_net import DispNet
 from opt_helper import opt, autoflags
-from cam_utils import query_K, rescale_K, resize_image_pairs
 from estimate import NavScene, TmapDecoder, warp_topdown, get_visual_odometry, get_minimap
 
 
 def predict_disp(model, imgnameL, imgnameR):
-    imgL = imgtool.imread(imgnameL)
-    imgR = imgtool.imread(imgnameR)
+    imgL = utils.imread(imgnameL)
+    imgR = utils.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
 
     # denoising?
@@ -29,7 +28,7 @@ def predict_disp(model, imgnameL, imgnameR):
     # imgR = cv2.bilateralFilter(imgR, 11, 17, 17)
 
     # session run
-    imgL_fit, imgR_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
+    imgL_fit, imgR_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
     dispL, _ = model.predict_single(imgL_fit, imgR_fit)
     dispL = np.squeeze(dispL) # [h, w]
     dispL = width * cv2.resize(dispL, (width, height))
@@ -37,21 +36,21 @@ def predict_disp(model, imgnameL, imgnameR):
 
 
 def predict_tmap(model, imgnameL, imgnameR, cat):
-    imgL = imgtool.imread(imgnameL)
-    imgR = imgtool.imread(imgnameR)
+    imgL = utils.imread(imgnameL)
+    imgR = utils.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
-    K, baseline = query_K(cat)
+    K, baseline = utils.query_K(cat)
     baseline = np.array(baseline, np.float32)
 
     # rescale to fit nn-input
-    imgL_fit, imgR_fit, K_fit = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32, K)
+    imgL_fit, imgR_fit, K_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32, K)
 
     # calculate cte/ye
     t0 = time.time()
     depth, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
     depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
-    K_tmap = rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
+    K_tmap = utils.rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
     topdown, zn = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
     cte, ye = get_visual_odometry(topdown, zn, max_angle=30)
     t1 = time.time()
@@ -59,7 +58,7 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
 
     # display minimap
     minimap = get_minimap(topdown, zn, cte, ye)
-    imgtool.imshow(minimap, wait=False)
+    utils.imshow(minimap, wait=False)
 
     # mark traversability to pcd image
     green = np.full((height, width, 3), (0, 255, 0), np.uint8)
@@ -125,8 +124,8 @@ if __name__ == '__main__':
     # def ns_feeder(index):
     #     imgname = images[index % len(images)]
     #     depthname = (data_dir/imgname.stem.replace('Color', 'Depth')).with_suffix('.png')
-    #     img = imgtool.imread(imgname)
-    #     depth = imgtool.imread(depthname) * 0.001
+    #     img = utils.imread(imgname)
+    #     depth = utils.imread(depthname) * 0.001
     #     K = np.array([[613, 0, 332], [0, 613, 242], [0, 0, 1]])
     #     K_depth = np.array([[385.345, 0, 320.409], [0, 385.345, 244.852], [0, 0, 1]])
     #     return img, np.clip(depth, 0, 30), K_depth

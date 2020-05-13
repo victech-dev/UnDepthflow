@@ -5,7 +5,7 @@ import tensorflow_addons as tfa
 import functools
 
 from opt_helper import opt
-from loss_utils import charbonnier_loss
+from losses import charbonnier_loss
 
 _leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
@@ -240,8 +240,7 @@ if __name__ == '__main__':
     import numpy as np
     from pathlib import Path
     import time
-    import imgtool
-    from cam_utils import resize_image_pairs
+    import utils
 
     disp_net = DispNet()
     disp_net.load_weights('.results_stereosv/model-tf2')
@@ -253,13 +252,13 @@ if __name__ == '__main__':
         imgnameL = imgnamesL[index % len(imgnamesL)]
         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
 
-        imgL = imgtool.imread(str(imgnameL))
-        imgR = imgtool.imread(str(imgnameR))
-        imgL, imgR = resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
+        imgL = utils.imread(str(imgnameL))
+        imgR = utils.imread(str(imgnameR))
+        imgL, imgR = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
 
         t0 = time.time()
         dispL, _ = disp_net.predict_single(imgL, imgR)
         t1 = time.time()
         print("* elspaed:", t1 - t0)
-        imgtool.imshow(dispL.numpy())
-        #imgtool.imshow(disp0)
+        utils.imshow(dispL.numpy())
+        #utils.imshow(disp0)
