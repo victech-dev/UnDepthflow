@@ -173,6 +173,8 @@ class PwcNet_Single(Layer):
         disp2 = flow4[:, :, :, 1:2] / (W / (2**4)) # 1/16 of input size
         disp3 = flow5[:, :, :, 1:2] / (W / (2**5)) # 1/32 of input size
 
+        # Note that flow is calculated as signed value, but 
+        # we are returning disp as positive value for both left and right
         if self.neg:
             return -disp0, -disp1, -disp2, -disp3
         else:
