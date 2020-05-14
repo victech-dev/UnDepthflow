@@ -7,26 +7,32 @@ import functools
 from opt_helper import opt
 from losses import charbonnier_loss
 
-_leaky_relu = functools.partial(tf.nn.leaky_relu, alpha=0.1)
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
-_conv2d = functools.partial(Conv2D, padding='same', activation=_leaky_relu, kernel_regularizer=_reg)
+
+class MyConv2d(Layer):
+    def __init__(self, filters, kernel_size, strides, dilation_rate=1, activation=True, **kwargs):
+        super(MyConv2d, self).__init__(**kwargs)
+        self._cnv = Conv2D(filters, kernel_size, strides, padding='same', dilation_rate=dilation_rate, activation=None, kernel_regularizer=_reg)
+        self._activation = tf.keras.layers.LeakyReLU(0.1) if activation else lambda x: x
+    def call(self, inputs):
+        return self._activation(self._cnv(inputs))
 
 class FeaturePyramid(Layer):
     def __init__(self, *args, **kwargs):
         super(FeaturePyramid, self).__init__(*args, **kwargs)
         self._cnvs = []
-        self._cnvs.append(_conv2d(16, 3, 2, name='cnv1'))
-        self._cnvs.append(_conv2d(16, 3, 1, name='cnv2'))
-        self._cnvs.append(_conv2d(32, 3, 2, name='cnv3'))
-        self._cnvs.append(_conv2d(32, 3, 1, name='cnv4'))
-        self._cnvs.append(_conv2d(64, 3, 2, name='cnv5'))
-        self._cnvs.append(_conv2d(64, 3, 1, name='cnv6'))
-        self._cnvs.append(_conv2d(96, 3, 2, name='cnv7'))
-        self._cnvs.append(_conv2d(96, 3, 1, name='cnv8'))
-        self._cnvs.append(_conv2d(128, 3, 2, name='cnv9'))
-        self._cnvs.append(_conv2d(128, 3, 1, name='cnv10'))
-        self._cnvs.append(_conv2d(192, 3, 2, name='cnv11'))
-        self._cnvs.append(_conv2d(192, 3, 1, name='cnv12'))
+        self._cnvs.append(MyConv2d(16, 3, 2, name='cnv1'))
+        self._cnvs.append(MyConv2d(16, 3, 1, name='cnv2'))
+        self._cnvs.append(MyConv2d(32, 3, 2, name='cnv3'))
+        self._cnvs.append(MyConv2d(32, 3, 1, name='cnv4'))
+        self._cnvs.append(MyConv2d(64, 3, 2, name='cnv5'))
+        self._cnvs.append(MyConv2d(64, 3, 1, name='cnv6'))
+        self._cnvs.append(MyConv2d(96, 3, 2, name='cnv7'))
+        self._cnvs.append(MyConv2d(96, 3, 1, name='cnv8'))
+        self._cnvs.append(MyConv2d(128, 3, 2, name='cnv9'))
+        self._cnvs.append(MyConv2d(128, 3, 1, name='cnv10'))
+        self._cnvs.append(MyConv2d(192, 3, 2, name='cnv11'))
+        self._cnvs.append(MyConv2d(192, 3, 1, name='cnv12'))
 
     def call(self, inputs):
         x = [inputs]
@@ -38,12 +44,12 @@ class FeaturePyramid(Layer):
 class FlowDecoder(Layer):
     def __init__(self, *args, **kwargs):
         super(FlowDecoder, self).__init__(*args, **kwargs)
-        self._cnv1 = _conv2d(128, 3, 1, name=f'cnv1')
-        self._cnv2 = _conv2d(128, 3, 1, name=f'cnv2')
-        self._cnv3 = _conv2d(96, 3, 1, name=f'cnv3')
-        self._cnv4 = _conv2d(64, 3, 1, name=f'cnv4')
-        self._cnv5 = _conv2d(32, 3, 1, name=f'cnv5')
-        self._cnv6 = _conv2d(1, 3, 1, activation=None, name=f'cnv6')
+        self._cnv1 = MyConv2d(128, 3, 1, name=f'cnv1')
+        self._cnv2 = MyConv2d(128, 3, 1, name=f'cnv2')
+        self._cnv3 = MyConv2d(96, 3, 1, name=f'cnv3')
+        self._cnv4 = MyConv2d(64, 3, 1, name=f'cnv4')
+        self._cnv5 = MyConv2d(32, 3, 1, name=f'cnv5')
+        self._cnv6 = MyConv2d(1, 3, 1, activation=None, name=f'cnv6')
 
     def call(self, inputs):
         out1 = self._cnv1(inputs)
@@ -61,13 +67,13 @@ class ContextNet(Layer):
     def __init__(self, *args, **kwargs):
         super(ContextNet, self).__init__(*args, **kwargs)
         self._cnvs = []
-        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=1, name='cnv1'))
-        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=2, name='cnv2'))
-        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=4, name='cnv3'))
-        self._cnvs.append(_conv2d(96, 3, 1, dilation_rate=8,  name='cnv4'))
-        self._cnvs.append(_conv2d(64, 3, 1, dilation_rate=16, name='cnv5'))
-        self._cnvs.append(_conv2d(32, 3, 1, dilation_rate=1, name='cnv6'))
-        self._cnvs.append(_conv2d(1, 3, 1, dilation_rate=1, activation=None, name=f'cnv7'))
+        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=1, name='cnv1'))
+        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=2, name='cnv2'))
+        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=4, name='cnv3'))
+        self._cnvs.append(MyConv2d(96, 3, 1, dilation_rate=8,  name='cnv4'))
+        self._cnvs.append(MyConv2d(64, 3, 1, dilation_rate=16, name='cnv5'))
+        self._cnvs.append(MyConv2d(32, 3, 1, dilation_rate=1, name='cnv6'))
+        self._cnvs.append(MyConv2d(1, 3, 1, dilation_rate=1, activation=None, name=f'cnv7'))
 
     def call(self, inputs):
         out = inputs
