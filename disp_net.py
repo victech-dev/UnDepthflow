@@ -222,8 +222,9 @@ def create_model(training=False):
                 model.add_metric(pixel_error, name='epe', aggregation='mean')
 
             if opt.loss_metric == 'l1-log': # l1 of log
-                left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
-                right_error = tf.abs(tf.math.log(1.0 + dispR_pyr[s]) - tf.math.log(1.0 + pred_dispR[s]))
+                eps = 1e-6
+                left_error = tf.abs(tf.math.log(eps + dispL_pyr[s]) - tf.math.log(eps + pred_dispL[s]))
+                right_error = tf.abs(tf.math.log(eps + dispR_pyr[s]) - tf.math.log(eps + pred_dispR[s]))
                 loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'charbonnier':
                 loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
