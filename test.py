@@ -82,9 +82,6 @@ if __name__ == '__main__':
     tmap_dec = tmap_decoder(disp_net)
     tf_pred = tf.function(functools.partial(tmap_dec.call, training=None, mask=None))
 
-    # tmap_dec([np.zeros((1, 384, 512, 3), np.float32), np.zeros((1, 384, 512, 3), np.float32), np.eye(3, dtype=np.float32)[None], np.array([1], np.float32)])
-    # tmap_dec.save('.results_stereosv/fullmodel-tf2', save_format='tf', include_optimizer=False)
-
     ''' point cloud test of office image of inbo.yeo '''
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))

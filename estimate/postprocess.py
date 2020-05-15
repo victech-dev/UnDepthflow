@@ -78,10 +78,10 @@ def tf_detect_plane_xz(xyz):
 ''' Traversability map decoder '''
 def tmap_decoder(disp_net):
     # Note K0 should already be scaled from original image size to nn-input size 
-    imgL = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
-    imgR = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
-    K0 = Input(shape=(3, 3), dtype='float32')
-    baseline = Input(shape=(), dtype='float32')
+    imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
+    imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
+    K0 = Input(shape=(3, 3), batch_size=1, dtype='float32')
+    baseline = Input(shape=(), batch_size=1, dtype='float32')
 
     # decode disparity
     disp, _ = disp_net([imgL, imgR])

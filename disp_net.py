@@ -192,9 +192,9 @@ def scale_pyramid(img, pool_size0, pool_size1, num_scales):
 
 
 def create_model(training=False):
-    # do we need (static) batch_size=1 for inference model here for memory optimization ??
-    imgL = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
-    imgR = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
+    batch_size = opt.batch_size if training else 1
+    imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
+    imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
 
     feat = FeaturePyramid(name='feature_net_disp')
     pwcL = PwcNet_Single(name='left_disp')
@@ -207,8 +207,8 @@ def create_model(training=False):
 
     if training == True:
         # loss, metric during training
-        dispL = Input(shape=(384, 512, 1), dtype='float32')
-        dispR = Input(shape=(384, 512, 1), dtype='float32')
+        dispL = Input(shape=(opt.img_height, opt.img_width, 1), batch_size=batch_size, dtype='float32')
+        dispR = Input(shape=(opt.img_height, opt.img_width, 1), batch_size=batch_size, dtype='float32')
         model = tf.keras.Model([imgL, imgR, dispL, dispR], [])
 
         dispL_pyr = scale_pyramid(dispL, 4, 2, 4)
