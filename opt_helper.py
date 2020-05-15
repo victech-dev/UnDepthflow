@@ -7,7 +7,7 @@ import sys
 opt = flags.FLAGS
 
 flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
-flags.DEFINE_integer('num_iterations', 300000, 'number of training iterations.')
+flags.DEFINE_integer('num_iterations', 1000000, 'number of training iterations.')
 flags.DEFINE_list('pretrained_model', [], 'filepath of a pretrained model to initialize from.')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
@@ -26,7 +26,6 @@ flags.DEFINE_float('elastic_distort', 8, 'elastic distort as pixel during traini
 
 flags.DEFINE_integer('batch_size', 4, 'batch size for training')
 flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')
-flags.DEFINE_integer('num_gpus', 1, 'the number of gpu to use')
 #flags.DEFINE_float('weight_decay', 1e-4, 'scale of l2 regularization')
 flags.DEFINE_float('weight_decay', 0.0, 'scale of l2 regularization')
 
