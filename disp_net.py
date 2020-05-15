@@ -75,7 +75,6 @@ class ContextNet(Layer):
         out = inputs
         for i, cnv in enumerate(self._cnvs):
             out = act(cnv(out)) if i < len(self._cnvs[:-1]) else cnv(out)
-            print(i < len(self._cnvs[:-1]))
         flow_x, flow_y = out, tf.zeros_like(out)
         return tf.concat([flow_y, flow_x], axis=3)
 
@@ -115,7 +114,6 @@ class PwcNet_Single(Layer):
         _, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = inputs[6:]
 
         neg = 'left' in self.name
-        print(self.name, neg)
         upsampling_x2 = UpSampling2D(size=2, interpolation='bilinear')
 
         cv6 = self._cost_volumn(feature1_6, feature2_6, d=4)
