@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D, AveragePooling2D
+from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D, AveragePooling2D, LeakyReLU
 from tensorflow.keras import Sequential, Model, Input
 import tensorflow_addons as tfa
 import functools
@@ -8,55 +8,50 @@ from opt_helper import opt
 from losses import charbonnier_loss
 
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
-
-class MyConv2d(Layer):
-    def __init__(self, filters, kernel_size, strides, dilation_rate=1, activation=True, **kwargs):
-        super(MyConv2d, self).__init__(**kwargs)
-        self._cnv = Conv2D(filters, kernel_size, strides, padding='same', dilation_rate=dilation_rate, activation=None, kernel_regularizer=_reg)
-        self._activation = tf.keras.layers.LeakyReLU(0.1) if activation else lambda x: x
-    def call(self, inputs):
-        return self._activation(self._cnv(inputs))
+_conv2d = functools.partial(Conv2D, padding='same', kernel_regularizer=_reg)
 
 class FeaturePyramid(Layer):
     def __init__(self, *args, **kwargs):
         super(FeaturePyramid, self).__init__(*args, **kwargs)
         self._cnvs = []
-        self._cnvs.append(MyConv2d(16, 3, 2, name='cnv1'))
-        self._cnvs.append(MyConv2d(16, 3, 1, name='cnv2'))
-        self._cnvs.append(MyConv2d(32, 3, 2, name='cnv3'))
-        self._cnvs.append(MyConv2d(32, 3, 1, name='cnv4'))
-        self._cnvs.append(MyConv2d(64, 3, 2, name='cnv5'))
-        self._cnvs.append(MyConv2d(64, 3, 1, name='cnv6'))
-        self._cnvs.append(MyConv2d(96, 3, 2, name='cnv7'))
-        self._cnvs.append(MyConv2d(96, 3, 1, name='cnv8'))
-        self._cnvs.append(MyConv2d(128, 3, 2, name='cnv9'))
-        self._cnvs.append(MyConv2d(128, 3, 1, name='cnv10'))
-        self._cnvs.append(MyConv2d(192, 3, 2, name='cnv11'))
-        self._cnvs.append(MyConv2d(192, 3, 1, name='cnv12'))
+        self._cnvs.append(_conv2d(16, 3, 2, name='cnv1'))
+        self._cnvs.append(_conv2d(16, 3, 1, name='cnv2'))
+        self._cnvs.append(_conv2d(32, 3, 2, name='cnv3'))
+        self._cnvs.append(_conv2d(32, 3, 1, name='cnv4'))
+        self._cnvs.append(_conv2d(64, 3, 2, name='cnv5'))
+        self._cnvs.append(_conv2d(64, 3, 1, name='cnv6'))
+        self._cnvs.append(_conv2d(96, 3, 2, name='cnv7'))
+        self._cnvs.append(_conv2d(96, 3, 1, name='cnv8'))
+        self._cnvs.append(_conv2d(128, 3, 2, name='cnv9'))
+        self._cnvs.append(_conv2d(128, 3, 1, name='cnv10'))
+        self._cnvs.append(_conv2d(192, 3, 2, name='cnv11'))
+        self._cnvs.append(_conv2d(192, 3, 1, name='cnv12'))
 
     def call(self, inputs):
-        x = [inputs]
+        act = LeakyReLU(0.1)
+        out = [inputs]
         for cnv in self._cnvs:
-            x.append(cnv(x[-1]))
-        return x[2], x[4], x[6], x[8], x[10], x[12]
+            out.append(act(cnv(out[-1])))
+        return out[2], out[4], out[6], out[8], out[10], out[12]
 
 
 class FlowDecoder(Layer):
     def __init__(self, *args, **kwargs):
         super(FlowDecoder, self).__init__(*args, **kwargs)
-        self._cnv1 = MyConv2d(128, 3, 1, name=f'cnv1')
-        self._cnv2 = MyConv2d(128, 3, 1, name=f'cnv2')
-        self._cnv3 = MyConv2d(96, 3, 1, name=f'cnv3')
-        self._cnv4 = MyConv2d(64, 3, 1, name=f'cnv4')
-        self._cnv5 = MyConv2d(32, 3, 1, name=f'cnv5')
-        self._cnv6 = MyConv2d(1, 3, 1, activation=None, name=f'cnv6')
+        self._cnv1 = _conv2d(128, 3, 1, name=f'cnv1')
+        self._cnv2 = _conv2d(128, 3, 1, name=f'cnv2')
+        self._cnv3 = _conv2d(96, 3, 1, name=f'cnv3')
+        self._cnv4 = _conv2d(64, 3, 1, name=f'cnv4')
+        self._cnv5 = _conv2d(32, 3, 1, name=f'cnv5')
+        self._cnv6 = _conv2d(1, 3, 1, name=f'cnv6')
 
     def call(self, inputs):
-        out1 = self._cnv1(inputs)
-        out2 = self._cnv2(out1)
-        out3 = self._cnv3(tf.concat([out1, out2], axis=3))
-        out4 = self._cnv4(tf.concat([out2, out3], axis=3))
-        out5 = self._cnv5(tf.concat([out3, out4], axis=3))
+        act = LeakyReLU(0.1)
+        out1 = act(self._cnv1(inputs))
+        out2 = act(self._cnv2(out1))
+        out3 = act(self._cnv3(tf.concat([out1, out2], axis=3)))
+        out4 = act(self._cnv4(tf.concat([out2, out3], axis=3)))
+        out5 = act(self._cnv5(tf.concat([out3, out4], axis=3)))
         flow_x = self._cnv6(tf.concat([out4, out5], axis=3))
         flow_y = tf.zeros_like(flow_x)
         flow = tf.concat([flow_y, flow_x], axis=3)
@@ -67,26 +62,27 @@ class ContextNet(Layer):
     def __init__(self, *args, **kwargs):
         super(ContextNet, self).__init__(*args, **kwargs)
         self._cnvs = []
-        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=1, name='cnv1'))
-        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=2, name='cnv2'))
-        self._cnvs.append(MyConv2d(128, 3, 1, dilation_rate=4, name='cnv3'))
-        self._cnvs.append(MyConv2d(96, 3, 1, dilation_rate=8,  name='cnv4'))
-        self._cnvs.append(MyConv2d(64, 3, 1, dilation_rate=16, name='cnv5'))
-        self._cnvs.append(MyConv2d(32, 3, 1, dilation_rate=1, name='cnv6'))
-        self._cnvs.append(MyConv2d(1, 3, 1, dilation_rate=1, activation=None, name=f'cnv7'))
+        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=1, name='cnv1'))
+        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=2, name='cnv2'))
+        self._cnvs.append(_conv2d(128, 3, 1, dilation_rate=4, name='cnv3'))
+        self._cnvs.append(_conv2d(96, 3, 1, dilation_rate=8,  name='cnv4'))
+        self._cnvs.append(_conv2d(64, 3, 1, dilation_rate=16, name='cnv5'))
+        self._cnvs.append(_conv2d(32, 3, 1, dilation_rate=1, name='cnv6'))
+        self._cnvs.append(_conv2d(1, 3, 1, dilation_rate=1, name=f'cnv7'))
 
     def call(self, inputs):
+        act = LeakyReLU(0.1)
         out = inputs
-        for cnv in self._cnvs:
-            out = cnv(out)
+        for i, cnv in enumerate(self._cnvs):
+            out = act(cnv(out)) if i < len(self._cnvs[:-1]) else cnv(out)
+            print(i < len(self._cnvs[:-1]))
         flow_x, flow_y = out, tf.zeros_like(out)
         return tf.concat([flow_y, flow_x], axis=3)
 
 
 class PwcNet_Single(Layer):
-    def __init__(self, neg, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(PwcNet_Single, self).__init__(*args, **kwargs)
-        self.neg = neg
         self._cn = ContextNet(name='cn')
         self._dec2 = FlowDecoder(name='dec2')
         self._dec3 = FlowDecoder(name='dec3')
@@ -118,11 +114,13 @@ class PwcNet_Single(Layer):
         _, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = inputs[:6]
         _, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = inputs[6:]
 
+        neg = 'left' in self.name
+        print(self.name, neg)
         upsampling_x2 = UpSampling2D(size=2, interpolation='bilinear')
 
         cv6 = self._cost_volumn(feature1_6, feature2_6, d=4)
         flow6, _ = self._dec6(cv6)
-        if self.neg:
+        if neg:
             flow6 = -tf.nn.relu(-flow6)
         else:
             flow6 = tf.nn.relu(flow6)
@@ -132,7 +130,7 @@ class PwcNet_Single(Layer):
         cv5 = self._cost_volumn(feature1_5, feature2_5w, d=4)
         flow5, _ = self._dec5(tf.concat([cv5, feature1_5, flow6to5], axis=3))
         flow5 = flow5 + flow6to5
-        if self.neg:
+        if neg:
             flow5 = -tf.nn.relu(-flow5)
         else:
             flow5 = tf.nn.relu(flow5)
@@ -142,7 +140,7 @@ class PwcNet_Single(Layer):
         cv4 = self._cost_volumn(feature1_4, feature2_4w, d=4)
         flow4, _ = self._dec4(tf.concat([cv4, feature1_4, flow5to4[:, :, :, 1:2]], axis=3))
         flow4 = flow4 + flow5to4
-        if self.neg:
+        if neg:
             flow4 = -tf.nn.relu(-flow4)
         else:
             flow4 = tf.nn.relu(flow4)
@@ -152,7 +150,7 @@ class PwcNet_Single(Layer):
         cv3 = self._cost_volumn(feature1_3, feature2_3w, d=4)
         flow3, _ = self._dec3(tf.concat([cv3, feature1_3, flow4to3[:, :, :, 1:2]], axis=3))
         flow3 = flow3 + flow4to3
-        if self.neg:
+        if neg:
             flow3 = -tf.nn.relu(-flow3)
         else:
             flow3 = tf.nn.relu(flow3)
@@ -162,13 +160,13 @@ class PwcNet_Single(Layer):
         cv2 = self._cost_volumn(feature1_2, feature2_2w, d=4)
         flow2_raw, f2 = self._dec2(tf.concat([cv2, feature1_2, flow3to2[:, :, :, 1:2]], axis=3))
         flow2_raw = flow2_raw + flow3to2
-        if self.neg:
+        if neg:
             flow2_raw = -tf.nn.relu(-flow2_raw)
         else:
             flow2_raw = tf.nn.relu(flow2_raw)
 
         flow2 = self._cn(tf.concat([flow2_raw[:, :, :, 1:2], f2], axis=3)) + flow2_raw
-        if self.neg:
+        if neg:
             flow2 = -tf.nn.relu(-flow2)
         else:
             flow2 = tf.nn.relu(flow2)
@@ -181,50 +179,49 @@ class PwcNet_Single(Layer):
 
         # Note that flow is calculated as signed value, but 
         # we are returning disp as positive value for both left and right
-        if self.neg:
+        if neg:
             return -disp0, -disp1, -disp2, -disp3
         else:
             return disp0, disp1, disp2, disp3
 
 
-class DispNet(Model):
-    def __init__(self, *args, **kwargs):
-        super(DispNet, self).__init__(*args, **kwargs)
-        self._feat = FeaturePyramid(name='feature_net_disp')
-        self._pwcL = PwcNet_Single(True, name='left_disp')
-        self._pwcR = PwcNet_Single(False, name='right_disp')
+def scale_pyramid(img, pool_size0, pool_size1, num_scales):
+    scaled_imgs = [img if pool_size0 == 1 else AveragePooling2D(pool_size0)(img)]
+    downsample1 = AveragePooling2D(pool_size1)
+    for _ in range(1, num_scales):
+        scaled_imgs.append(downsample1(scaled_imgs[-1]))
+    return scaled_imgs
 
-    @staticmethod
-    def _scale_pyramid(img, pool_size0, pool_size1, num_scales):
-        scaled_imgs = [img if pool_size0 == 1 else AveragePooling2D(pool_size0)(img)]
-        downsample1 = AveragePooling2D(pool_size1)
-        for _ in range(1, num_scales):
-            scaled_imgs.append(downsample1(scaled_imgs[-1]))
-        return scaled_imgs
 
-    def call(self, inputs, training=None):
-        imgL, imgR = inputs[:2]
+def create_model(training=False):
+    # do we need (static) batch_size=1 for inference model here for memory optimization ??
+    imgL = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
+    imgR = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
 
-        featL = self._feat(imgL)
-        featR = self._feat(imgR)
-        pred_dispL = self._pwcL(featL + featR)
-        pred_dispR = self._pwcR(featR + featL)
+    feat = FeaturePyramid(name='feature_net_disp')
+    pwcL = PwcNet_Single(name='left_disp')
+    pwcR = PwcNet_Single(name='right_disp')
 
-        if training != True:
-            return pred_dispL[:1] + pred_dispR[:1]
+    featL = feat(imgL)
+    featR = feat(imgR)
+    pred_dispL = pwcL(featL + featR)
+    pred_dispR = pwcR(featR + featL)
 
+    if training == True:
         # loss, metric during training
-        dispL, dispR = inputs[2:]
-        dispL_pyr = self._scale_pyramid(dispL, 4, 2, 4)
-        dispR_pyr = self._scale_pyramid(dispR, 4, 2, 4)
-        SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
+        dispL = Input(shape=(384, 512, 1), dtype='float32')
+        dispR = Input(shape=(384, 512, 1), dtype='float32')
+        model = tf.keras.Model([imgL, imgR, dispL, dispR], [])
 
+        dispL_pyr = scale_pyramid(dispL, 4, 2, 4)
+        dispR_pyr = scale_pyramid(dispR, 4, 2, 4)
+        SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
         for s in range(4):
             left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
             right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
             if s == 0:
                 pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
-                self.add_metric(pixel_error, name='epe', aggregation='mean')
+                model.add_metric(pixel_error, name='epe', aggregation='mean')
 
             if opt.loss_metric == 'l1-log': # l1 of log
                 left_error = tf.abs(tf.math.log(1.0 + dispL_pyr[s]) - tf.math.log(1.0 + pred_dispL[s]))
@@ -234,13 +231,10 @@ class DispNet(Model):
                 loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
             else:
                 raise ValueError('! Unsupported loss metric')
-            self.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
-        return tuple()
-
-    @tf.function
-    def predict_single(self, imgL, imgR):
-        dispL, dispR = self([imgL[None], imgR[None]], False)
-        return dispL[0], dispR[0]
+            model.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
+    else:
+        model = tf.keras.Model([imgL, imgR], pred_dispL[:1] + pred_dispR[:1])
+    return model
 
 
 if __name__ == '__main__':
@@ -249,9 +243,11 @@ if __name__ == '__main__':
     from pathlib import Path
     import time
     import utils
+    import functools
 
-    disp_net = DispNet()
-    disp_net.load_weights('.results_stereosv/model-tf2')
+    disp_net = create_model()
+    disp_net.load_weights('.results_stereosv/weights-tf2')
+    predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
  
     # point cloud test of office image of inbo.yeo 
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
@@ -265,8 +261,8 @@ if __name__ == '__main__':
         imgL, imgR = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
 
         t0 = time.time()
-        dispL, _ = disp_net.predict_single(imgL, imgR)
+        dispL, _ = predict([imgL[None], imgR[None]])
         t1 = time.time()
         print("* elspaed:", t1 - t0)
-        utils.imshow(dispL.numpy())
+        utils.imshow(dispL[0].numpy())
         #utils.imshow(disp0)

@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 from opt_helper import opt, autoflags
-from disp_net import DispNet
+from disp_net import create_model
 from dataloader import batch_from_dataset
 
 STEPS_PER_EPOCH = 10000
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     strategy = tf.distribute.MirroredStrategy()
     print('* Number of devices: ', strategy.num_replicas_in_sync)
     with strategy.scope():
-        model = DispNet()
+        model = create_model(training=True)
         # Cosine annealing lr if required
         if isinstance(opt.learning_rate, (list, tuple)):
             lr = list(map(float, opt.learning_rate))

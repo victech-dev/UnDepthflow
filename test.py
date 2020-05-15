@@ -8,10 +8,11 @@ from pathlib import Path
 import re
 from tqdm import tqdm
 import time
+import functools
 
-from disp_net import DispNet
+from disp_net import create_model
 from opt_helper import opt, autoflags
-from estimate import NavScene, TmapDecoder, warp_topdown, get_visual_odometry, get_minimap
+from estimate import NavScene, tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
 
 
 def predict_disp(model, imgnameL, imgnameR):
@@ -29,13 +30,13 @@ def predict_disp(model, imgnameL, imgnameR):
 
     # session run
     imgL_fit, imgR_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
-    dispL, _ = model.predict_single(imgL_fit, imgR_fit)
+    dispL, _ = model([imgL_fit[None], imgR_fit[None]])
     dispL = np.squeeze(dispL) # [h, w]
     dispL = width * cv2.resize(dispL, (width, height))
     return imgL, dispL
 
 
-def predict_tmap(model, imgnameL, imgnameR, cat):
+def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     imgL = utils.imread(imgnameL)
     imgR = utils.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
@@ -47,7 +48,7 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
 
     # calculate cte/ye
     t0 = time.time()
-    depth, tmap = model([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
+    depth, tmap = tf_pred([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
     depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
     K_tmap = utils.rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
@@ -68,16 +69,21 @@ def predict_tmap(model, imgnameL, imgnameR, cat):
 
     return img_to_show, depth, K
 
+
 if __name__ == '__main__':
     autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
-    opt.pretrained_model = '.results_stereosv/model-tf2'
+    opt.pretrained_model = '.results_stereosv/weights-tf2'
 
     print('* Restoring model')
-    disp_net = DispNet()
+    disp_net = create_model(training=False)
     disp_net.load_weights(opt.pretrained_model)
-    tmap_dec = TmapDecoder(disp_net)
+    tmap_dec = tmap_decoder(disp_net)
+    tf_pred = tf.function(functools.partial(tmap_dec.call, training=None, mask=None))
+
+    # tmap_dec([np.zeros((1, 384, 512, 3), np.float32), np.zeros((1, 384, 512, 3), np.float32), np.eye(3, dtype=np.float32)[None], np.array([1], np.float32)])
+    # tmap_dec.save('.results_stereosv/fullmodel-tf2', save_format='tf', include_optimizer=False)
 
     ''' point cloud test of office image of inbo.yeo '''
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
@@ -85,7 +91,7 @@ if __name__ == '__main__':
     def ns_feeder(index):
         imgnameL = imgnamesL[index % len(imgnamesL)]
         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        img, depth, K = predict_tmap(tmap_dec, str(imgnameL), str(imgnameR), cat='victech')
+        img, depth, K = predict_tmap(tf_pred, str(imgnameL), str(imgnameR))
         return img, np.clip(depth, 0, 30), K
 
     ''' generate disparity map prediction '''

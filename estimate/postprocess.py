@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
+from tensorflow.keras.layers import Layer, Input
 import numpy as np
 import cv2
 from opt_helper import opt
@@ -76,41 +76,38 @@ def tf_detect_plane_xz(xyz):
 
 
 ''' Traversability map decoder '''
-class TmapDecoder(Layer):
-    def __init__(self, disp_net, *args, **kwargs):
-        super(TmapDecoder, self).__init__(*args, **kwargs)
-        self._disp_net = disp_net
+def tmap_decoder(disp_net):
+    # Note K0 should already be scaled from original image size to nn-input size 
+    imgL = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
+    imgR = Input(shape=(opt.img_height, opt.img_width, 3), dtype='float32')
+    K0 = Input(shape=(3, 3), dtype='float32')
+    baseline = Input(shape=(), dtype='float32')
 
-    @tf.function
-    def call(self, inputs):
-        # Note K0 should already be scaled from original image size to nn-input size 
-        imgL, imgR, K0, baseline = inputs
-        _, h0, w0, _ = tf.unstack(tf.shape(imgL))
+    # decode disparity
+    disp, _ = disp_net([imgL, imgR])
 
-        # decode disparity
-        disp, _ = self._disp_net([imgL, imgR], False)
+    # rescale intrinsic
+    _, h1, w1, _ = tf.unstack(tf.shape(disp))
+    rw = tf.cast(w1, tf.float32) / opt.img_width
+    rh = tf.cast(h1, tf.float32) / opt.img_height
+    K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
+    K1 = K_scale[None,:,:] @ K0
 
-        # rescale intrinsic
-        _, h1, w1, _ = tf.unstack(tf.shape(disp))
-        rw = tf.cast(w1, tf.float32) / tf.cast(w0, tf.float32)
-        rh = tf.cast(h1, tf.float32) / tf.cast(h0, tf.float32)
-        K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
-        K1 = K_scale[None,:,:] @ K0
+    # construct point cloud
+    fxb = K1[:,0,0] * baseline
+    disp = tf.cast(w1, tf.float32) * tf.maximum(disp, 1e-6)
+    depth = fxb[:,None,None,None] / disp
+    xyz = tf_populate_pcd(depth, K1)
 
-        # construct point cloud
-        fxb = K1[:,0,0] * baseline
-        disp = tf.cast(w1, tf.float32) * tf.maximum(disp, 1e-6)
-        depth = fxb[:,None,None,None] / disp
-        xyz = tf_populate_pcd(depth, K1)
+    # detect xz-plane from pcd
+    plane_xz = tf_detect_plane_xz(xyz)
 
-        # detect xz-plane from pcd
-        plane_xz = tf_detect_plane_xz(xyz)
+    # Condition 1: thresh below camera
+    cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+    # Condition 2: y component of normal vector
+    cond2 = tf.cast(plane_xz > 0.85, tf.float32)
 
-        # Condition 1: thresh below camera
-        cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
-        # Condition 2: y component of normal vector
-        cond2 = tf.cast(plane_xz > 0.85, tf.float32)
-        return depth, cond1 * cond2
+    return tf.keras.Model([imgL, imgR, K0, baseline], [depth, cond1 * cond2])
 
 
 def warp_topdown(img, K, elevation, fov=5, ppm=20):
