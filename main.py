@@ -28,7 +28,7 @@ if __name__ == '__main__':
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
 
     callbacks = []
-    callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}'), save_weights_only=True, save_best_only=False))
+    callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}.h5'), save_weights_only=True, save_best_only=False))
     callbacks.append(TensorBoard(log_dir=opt.trace, update_freq=100))
 
     ds_trn = batch_from_dataset()

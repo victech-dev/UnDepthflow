@@ -226,6 +226,8 @@ def create_model(training=False):
                 left_error = tf.abs(tf.math.log(eps + dispL_pyr[s]) - tf.math.log(eps + pred_dispL[s]))
                 right_error = tf.abs(tf.math.log(eps + dispR_pyr[s]) - tf.math.log(eps + pred_dispR[s]))
                 loss = tf.reduce_mean(left_error + right_error)
+            elif opt.loss_metric == 'log-l1': # log of l1
+                loss = tf.reduce_mean(tf.math.log(1.0 + tf.abs(pred_dispL[s] - dispL_pyr[s])))
             elif opt.loss_metric == 'charbonnier':
                 loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
             else:
@@ -244,8 +246,8 @@ if __name__ == '__main__':
     import utils
     import functools
 
-    disp_net = create_model()
-    disp_net.load_weights('.results_stereosv/weights-tf2')
+    disp_net = create_model(training=False)
+    disp_net.load_weights('.results_stereosv/weights-log.h5')
     predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
  
     # point cloud test of office image of inbo.yeo 

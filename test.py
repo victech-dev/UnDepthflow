@@ -74,7 +74,7 @@ if __name__ == '__main__':
     autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
-    opt.pretrained_model = '.results_stereosv/weights-tf2'
+    opt.pretrained_model = '.results_stereosv/weights-log.h5'
 
     print('* Restoring model')
     disp_net = create_model(training=False)
