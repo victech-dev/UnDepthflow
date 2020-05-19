@@ -227,7 +227,9 @@ def create_model(training=False):
                 right_error = tf.abs(tf.math.log(eps + dispR_pyr[s]) - tf.math.log(eps + pred_dispR[s]))
                 loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'log-l1': # log of l1
-                loss = tf.reduce_mean(tf.math.log(1.0 + tf.abs(pred_dispL[s] - dispL_pyr[s])))
+                left_error = tf.math.log(1.0 + tf.abs(pred_dispL[s] - dispL_pyr[s]))
+                right_error = tf.math.log(1.0 + tf.abs(pred_dispR[s] - dispR_pyr[s]))
+                loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'charbonnier':
                 loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
             else:
