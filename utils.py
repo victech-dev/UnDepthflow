@@ -12,16 +12,29 @@ def imread(name):
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
     return im
 
-def imshow(img, name='imshow', wait=True, norm=True):
+
+def imshow(img, name='imshow', wait=True, norm='color'):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-    if len(img.shape)==3 and img.shape[2]==3:
+    img = np.atleast_3d(img)
+    if img.shape[2] == 3: # rgb 2 bgr
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    if norm and (img.dtype==np.float32 or img.dtype==np.float):
-        img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
-        img = cv2.convertScaleAbs(img, alpha=255)
+    elif norm and img.shape[2] == 1: # single channel
+        n = img / max(np.percentile(img, 95), 1e-6)
+        if norm == 'color':
+            # [small value of img, large value of img] -> [blue, red]
+            h = 120 * np.clip(1 - n, 0, 1) 
+            hsv = np.full(n.shape[:2] + (3,), 255, np.uint8)
+            hsv[:,:,0:1] = h.astype(np.uint8)
+            img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        elif norm == 'gray':
+            img = cv2.convertScaleAbs(n, alpha=255)
+        else:
+            raise ValueError('Unsupported normalize type')
     cv2.imshow(name, img)
     if wait:
-        cv2.waitKey(0)
+        return cv2.waitKey(0)
+    return None
+
 
 def query_K(cat):
     if cat == 'victech':
@@ -76,5 +89,6 @@ if __name__ == "__main__":
     root_dir = Path("M:\\Users\\sehee\\camera_taker\\undist_fisheye\\dispL")
     for disp_file in root_dir.glob('*.pfm'):
         disp = cv2.imread(str(disp_file), -1)
-        imshow(disp)
+        if imshow(disp) == 27:
+            break
     cv2.destroyAllWindows()    
