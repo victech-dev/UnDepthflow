@@ -14,6 +14,7 @@ from disp_net import create_model
 from opt_helper import opt, autoflags
 from estimate import NavScene, tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
 
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
 def predict_disp(model, imgnameL, imgnameR):
     imgL = utils.imread(imgnameL)
@@ -91,6 +92,7 @@ def export_to_frozen_saved_model():
         tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imR"),
         tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="K"),
         tf.TensorSpec(shape=(1,), dtype=tf.float32, name="baseline")))
+
     tf_pred_frozen = convert_variables_to_constants_v2(tf_pred_concrete)
     tf.saved_model.save(tmap_dec, './frozen_models', signatures=tf_pred_frozen)
 
