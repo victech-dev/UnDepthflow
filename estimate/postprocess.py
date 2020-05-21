@@ -103,7 +103,7 @@ def tmap_decoder(disp_net):
     plane_xz = tf_detect_plane_xz(xyz)
 
     # Condition 1: thresh below camera
-    cond1 = tf.cast(xyz[:,:,:,1] > 0.3, tf.float32) 
+    cond1 = tf.cast(xyz[:,:,:,1] > 0.35, tf.float32) 
     # Condition 2: y component of normal vector
     cond2 = tf.cast(plane_xz > 0.85, tf.float32)
 
@@ -137,18 +137,18 @@ def warp_topdown(img, K, elevation, fov=5, ppm=20):
     return cv2.warpPerspective(img, tfm, (W,H)), zn
 
 
-def get_visual_odometry(tmap, zn, max_angle=30, search_range=(2, 2), passage_width=1, ppm=20):
+def get_visual_odometry(tmap, zn, max_angle=30, search_range=(2, 2), passage_width=3, ppm=20):
     ''' tmap: topdown of original traversibility map '''
     Hs, Ws = tmap.shape[:2]
-    Wd, Hd = (int(search_range[0] * ppm), int(search_range[1] * ppm))
+    Wd, Hd = (int((search_range[0] + passage_width) * ppm), int(search_range[1] * ppm))
     xc, y1 = 0.5*(Ws-1), Hs-1 # bottom center coord of tmap
-    x0 = xc - 0.5 * search_range[0] * ppm # left
-    x1 = xc + 0.5 * search_range[0] * ppm # right
+    x0 = xc - 0.5 * (search_range[0] + passage_width) * ppm # left
+    x1 = xc + 0.5 * (search_range[0] + passage_width) * ppm # right
     y0 = y1 - search_range[1] * ppm # top
     src_pts = np.float32([[x0, y0], [x0, y1], [x1, y1]])
 
     ksize = int(passage_width * ppm)
-    kernel_1d = np.sin(np.linspace(0, np.pi, ksize))
+    kernel_1d = np.sin(np.linspace(0, np.pi, ksize)) ** 2
 
     # generate correlation map (rows for different angle, cols for different offset)
     angle_res = 30
@@ -187,7 +187,7 @@ def get_minimap(tmap, zn, cte, ye, ppm=20):
     # show track line
     rot = np.array([[np.cos(ye), -np.sin(ye)], [np.sin(ye), np.cos(ye)]])
     pt0 = [-cte, 0] @ rot.T
-    pt1 = [-cte, zn + 4] @ rot.T
+    pt1 = [-cte, zn + 2] @ rot.T
     cv2.line(mm, _l2m(pt0), _l2m(pt1), (0,255,0), thickness=1)
     return mm
 
