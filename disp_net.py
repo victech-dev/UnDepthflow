@@ -232,6 +232,18 @@ def create_model(training=False):
                 loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'charbonnier':
                 loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
+            elif opt.loss_metric == 'depth':
+                fxb = 45.13725045708206 # f * b * (512/640)
+                max_depth = 30
+                min_disp = fxb / max_depth
+                depthL_true = fxb / tf.maximum(opt.img_width * dispL_pyr[s], min_disp)
+                depthL_pred = fxb / (opt.img_width * pred_dispL[s] + 1.0)
+                depthR_true = fxb / tf.maximum(opt.img_width * dispR_pyr[s], min_disp)
+                depthR_pred = fxb / (opt.img_width * pred_dispR[s] + 1.0)
+                huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.NONE)
+                errorL = tf.reduce_mean(huber_loss(depthL_true, depthL_pred))
+                errorR = tf.reduce_mean(huber_loss(depthR_true, depthR_pred))
+                loss = errorL + errorR
             else:
                 raise ValueError('! Unsupported loss metric')
             model.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
