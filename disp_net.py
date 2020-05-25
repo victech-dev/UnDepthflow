@@ -202,8 +202,8 @@ def create_model(training=False):
 
     featL = feat(imgL)
     featR = feat(imgR)
-    pred_dispL = pwcL(featL + featR)
-    pred_dispR = pwcR(featR + featL)
+    pyrL_pred = pwcL(featL + featR)
+    pyrR_pred = pwcR(featR + featL)
 
     if training == True:
         # loss, metric during training
@@ -211,47 +211,40 @@ def create_model(training=False):
         dispR = Input(shape=(opt.img_height, opt.img_width, 1), batch_size=batch_size, dtype='float32')
         model = tf.keras.Model([imgL, imgR, dispL, dispR], [])
 
-        dispL_pyr = scale_pyramid(dispL, 4, 2, 4)
-        dispR_pyr = scale_pyramid(dispR, 4, 2, 4)
+        pyrL_true = scale_pyramid(dispL, 4, 2, 4)
+        pyrR_true = scale_pyramid(dispR, 4, 2, 4)
         SCALE_FACTOR = [1.0, 0.8, 0.6, 0.4]
         for s in range(4):
-            left_pixel_error = opt.img_width * (dispL_pyr[s] - pred_dispL[s])
-            right_pixel_error = opt.img_width * (dispR_pyr[s] - pred_dispR[s])
+            epeL = opt.img_width * tf.abs(pyrL_pred[s] - pyrL_true[s])
+            epeR = opt.img_width * tf.abs(pyrR_pred[s] - pyrR_true[s])
             if s == 0:
-                pixel_error = 0.5 * tf.reduce_mean(tf.abs(left_pixel_error) + tf.abs(right_pixel_error))
+                # end-point-error
+                pixel_error = 0.5 * tf.reduce_mean(epeL + epeR)
                 model.add_metric(pixel_error, name='epe', aggregation='mean')
+                # depth error w.r.t reference camera
+                ref_fxb = 45.13725045708206 # reference f*b = 467.83661057 * 0.120601 * (512/640)
+                max_depth = 50.0
+                disp2depth = lambda x: tf.clip_by_value(ref_fxb / tf.maximum(opt.img_width * x, 1e-6), 0.0, max_depth)
+                depthL_true, depthL_pred, depthR_true, depthR_pred = map(disp2depth, [pyrL_true[s], pyrL_pred[s], pyrR_true[s], pyrR_pred[s]])
+                depth_error = 0.5 * tf.reduce_mean(tf.abs(depthL_pred - depthL_true) + tf.abs(depthR_pred - depthR_true))
+                model.add_metric(depth_error, name='depth_error', aggregation='mean')
 
             if opt.loss_metric == 'l1-log': # l1 of log
                 eps = 1e-6
-                left_error = tf.abs(tf.math.log(eps + dispL_pyr[s]) - tf.math.log(eps + pred_dispL[s]))
-                right_error = tf.abs(tf.math.log(eps + dispR_pyr[s]) - tf.math.log(eps + pred_dispR[s]))
+                left_error = tf.abs(tf.math.log(eps + pyrL_true[s]) - tf.math.log(eps + pyrL_pred[s]))
+                right_error = tf.abs(tf.math.log(eps + pyrR_true[s]) - tf.math.log(eps + pyrR_pred[s]))
                 loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'log-l1': # log of l1
-                left_error = tf.math.log(1.0 + tf.abs(pred_dispL[s] - dispL_pyr[s]))
-                right_error = tf.math.log(1.0 + tf.abs(pred_dispR[s] - dispR_pyr[s]))
+                left_error = tf.math.log(1.0 + epeL)
+                right_error = tf.math.log(1.0 + epeR)
                 loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'charbonnier':
-                loss = 0.1 * (charbonnier_loss(left_pixel_error) + charbonnier_loss(right_pixel_error))
-            elif opt.loss_metric == 'depth':
-                fxb = 45.13725045708206 # f * b * (512/640)
-                max_depth = 30
-                min_disp = fxb / max_depth
-                depthL_true = fxb / tf.maximum(opt.img_width * dispL_pyr[s], min_disp)
-                depthL_pred = max_depth * pred_dispL[s] # fxb / (opt.img_width * pred_dispL[s] + 1.0)
-                depthR_true = fxb / tf.maximum(opt.img_width * dispR_pyr[s], min_disp)
-                depthR_pred = max_depth * pred_dispR[s] # fxb / (opt.img_width * pred_dispR[s] + 1.0)
-                huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.NONE)
-                errorL = tf.reduce_mean(huber_loss(depthL_true, depthL_pred))
-                errorR = tf.reduce_mean(huber_loss(depthR_true, depthR_pred))
-                loss = errorL + errorR
-                if s == 0:
-                    depth_error = 0.5 * tf.reduce_mean(tf.abs(depthL_pred - depthL_true) + tf.abs(depthR_pred - depthR_true))
-                    model.add_metric(depth_error, name='depth_error', aggregation='mean')
+                loss = 0.1 * (charbonnier_loss(epeL) + charbonnier_loss(epeR))
             else:
                 raise ValueError('! Unsupported loss metric')
             model.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
     else:
-        model = tf.keras.Model([imgL, imgR], pred_dispL[:1] + pred_dispR[:1])
+        model = tf.keras.Model([imgL, imgR], pyrL_pred[:1] + pyrR_pred[:1])
     return model
 
 
