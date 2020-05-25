@@ -89,6 +89,7 @@ if __name__ == "__main__":
     root_dir = Path("M:\\Users\\sehee\\camera_taker\\undist_fisheye\\dispL")
     for disp_file in root_dir.glob('*.pfm'):
         disp = cv2.imread(str(disp_file), -1)
+        print(disp_file)
         if imshow(disp) == 27:
             break
     cv2.destroyAllWindows()    

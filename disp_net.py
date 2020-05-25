@@ -264,7 +264,8 @@ if __name__ == '__main__':
     import functools
 
     disp_net = create_model(training=False)
-    disp_net.load_weights('.results_stereosv/weights-log.h5')
+    disp_net.load_weights('.results_stereosv/weights-010.h5')
+    disp_net.summary()
     predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
  
     # point cloud test of office image of inbo.yeo 
@@ -281,6 +282,8 @@ if __name__ == '__main__':
         t0 = time.time()
         dispL, _ = predict([imgL[None], imgR[None]])
         t1 = time.time()
-        print("* elspaed:", t1 - t0)
-        utils.imshow(dispL[0].numpy())
+        disp = dispL[0].numpy()
+        print("* elspaed:", t1 - t0, np.min(disp), np.max(disp))
+        if utils.imshow(disp) == 27:
+            break
         #utils.imshow(disp0)
