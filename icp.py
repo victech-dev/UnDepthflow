@@ -78,7 +78,7 @@ if __name__ == "__main__":
     from pathlib import Path
     import time
 
-    from estimate import populate_pcd, surface_normal
+    from estimate import populate_pcd
     import utils
 
     K_org, baseline = utils.query_K('victech')
