@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 from opt_helper import opt, autoflags
-from disp_net import create_model
+from model.net import dgc_net as create_model #from disp_net import create_model
 from dataloader import batch_from_dataset
 
 STEPS_PER_EPOCH = 10000

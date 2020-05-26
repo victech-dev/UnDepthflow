@@ -29,14 +29,14 @@ flags.DEFINE_list('learning_rate', [1e-4, 1e-5], 'single value or range')
 #flags.DEFINE_float('weight_decay', 1e-4, 'scale of l2 regularization')
 flags.DEFINE_float('weight_decay', 0.0, 'scale of l2 regularization')
 
-flags.DEFINE_integer("img_height", 384, "Image height")
-flags.DEFINE_integer("img_width", 512, "Image width")
+flags.DEFINE_integer("img_height", 240, "Image height")
+flags.DEFINE_integer("img_width", 240, "Image width")
 
 # common for all mode
 flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
 
 # for stereosv
-flags.DEFINE_string('loss_metric', 'l1-log', 'charbonnier, l1-log, log-l1')
+flags.DEFINE_string('loss_metric', 'charbonnier', 'charbonnier, l1-log, log-l1')
 flags.DEFINE_integer("num_scales", 4, "Number of scales: 1/2^0, 1/2^1, ..., 1/2^(n-1)")
 
 # explicitly tell flags library to parse argv

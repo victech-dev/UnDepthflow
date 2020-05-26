@@ -257,7 +257,7 @@ if __name__ == '__main__':
     import functools
 
     disp_net = create_model(training=False)
-    disp_net.load_weights('.results_stereosv/weights-010.h5')
+    disp_net.load_weights('.results_stereosv/weights-log.h5')
     disp_net.summary()
     predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
  
