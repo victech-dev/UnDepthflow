@@ -81,7 +81,7 @@ class ContextNet(Layer):
 
 class FlowPyramid(Layer):
     def __init__(self, *args, **kwargs):
-        super(PwcNet_Single, self).__init__(*args, **kwargs)
+        super(FlowPyramid, self).__init__(*args, **kwargs)
         self._cn = ContextNet(name='cn')
         self._dec2 = FlowDecoder(name='dec2')
         self._dec3 = FlowDecoder(name='dec3')
@@ -99,17 +99,17 @@ class FlowPyramid(Layer):
 
     @staticmethod
     def _cost_volumn(feature1, feature2, d=4):
-        cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
+        # cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
+        _, H, W, _ = tf.unstack(tf.shape(feature1))
+        feature2 = tf.pad(feature2, [[0, 0], [d, d], [d, d], [0, 0]], "CONSTANT")
+        cv = []
+        for i in range(2 * d + 1):
+            for j in range(2 * d + 1):
+                cv.append(tf.reduce_mean(
+                    feature1 * feature2[:, i:(i+H), j:(j+W), :],
+                    axis=3, keepdims=True))
+        cv = tf.concat(cv, axis=3)
         return tf.nn.leaky_relu(cv, alpha=0.1)
-        # _, H, W, _ = tf.unstack(tf.shape(feature1))
-        # feature2 = tf.pad(feature2, [[0, 0], [d, d], [d, d], [0, 0]], "CONSTANT")
-        # cv = []
-        # for i in range(2 * d + 1):
-        #     for j in range(2 * d + 1):
-        #         cv.append(tf.reduce_mean(
-        #             feature1 * feature2[:, i:(i+H), j:(j+W), :],
-        #             axis=3, keepdims=True))
-        # return tf.concat(cv, axis=3)
 
     @staticmethod
     def _inv_warp_flow(image, flow):
@@ -190,7 +190,7 @@ def create_model(training=False):
         for s in range(5):
             epeL = tf.norm(pyrL_pred[s] - pyrL_true[s], axis=-1)
             epeR = tf.norm(pyrR_pred[s] - pyrR_true[s], axis=-1)
-            if s == 0:
+            if s == 4:
                 # end-point-error
                 aepe = 0.5 * tf.reduce_mean(epeL + epeR)
                 model.add_metric(aepe, name='AEPE', aggregation='mean')
