@@ -149,9 +149,7 @@ def read_image(imgL_path, imgR_path, dispL_path, dispR_path):
         imgL = radial_blur(imgL, iterations)
         imgR = radial_blur(imgR, iterations)
 
-    #imgL = (imgL / 255).astype(np.float32)
     imgL = cv2.resize(imgL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
-    #imgR = (imgR / 255).astype(np.float32)
     imgR = cv2.resize(imgR, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
 
     dispL = cv2.resize(dispL, (opt.img_width, opt.img_height), interpolation=cv2.INTER_AREA)
@@ -198,15 +196,8 @@ def batch_from_dataset():
         imgR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 3])
         dispL.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
         dispR.set_shape([opt.batch_size, opt.img_height, opt.img_width, 1])
-        return imgL, imgR, dispL, dispR
+        return (imgL, imgR, dispL, dispR), tuple()
     ds = ds.map(_setshape, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-    # temporary flow data
-    def _cvt_flow(imgL, imgR, dispL, dispR):
-        imgL = tf.cast(tf.clip_by_value(imgL*255, 0, 255), tf.uint8)
-        imgR = tf.cast(tf.clip_by_value(imgR*255, 0, 255), tf.uint8)
-        return (imgL, imgR, -dispL), tuple()
-    ds = ds.map(_cvt_flow, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # prefetch
     ds = ds.prefetch(16)
@@ -223,8 +214,8 @@ if __name__ == '__main__':
         imgL, imgR, dispL, dispR = map(lambda x: x[0].numpy(), inputs)
         H, W = imgL.shape[:2]
         tiled = np.zeros((H*2, W*2, 3), np.uint8)
-        tiled[:H,:W] = cv2.convertScaleAbs(imgL, alpha=255)
-        tiled[:H,W:] = cv2.convertScaleAbs(imgR, alpha=255)
+        tiled[:H,:W] = imgL
+        tiled[:H,W:] = imgR
         disp = np.concatenate([dispL, dispR], axis=1)
         disp = cv2.normalize(disp, None, 0, 1, cv2.NORM_MINMAX)
         disp = cv2.convertScaleAbs(disp, alpha=255)

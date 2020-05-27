@@ -11,6 +11,7 @@ import functools
 
 from opt_helper import opt
 from losses import charbonnier_loss
+from core_warp.grid_sample import grid_sample
 
 from model.modules import *
 
@@ -29,13 +30,22 @@ def factory(type):
     assert 0, 'Correspondence Map Decoder bad creation: ' + type
 
 
-class InvWarpFlow(Layer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+# class GridSample(Layer):
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
 
-    def call(self, inputs):
-        img, flow = inputs
-        return tfa.image.dense_image_warp(img, -flow)    
+#     def call(self, inputs):
+#         img, grid = inputs
+#         # turn the correspondence grid to flow
+#         _, H, W, _ = tf.unstack(tf.shape(img))
+#         Hf, Wf = tf.cast(H, tf.float32), tf.cast(W, tf.float32)
+#         y, x = tf.unstack(grid, axis=-1)
+#         y = (y + 1) * 0.5 * (Hf - 1)
+#         x = (x + 1) * 0.5 * (Wf - 1)
+#         ix, iy = tf.meshgrid(tf.linspace(0.0, Wf-1, W), tf.linspace(0.0, Hf-1, H))
+#         iyx = tf.stack([iy[None], ix[None]], axis=-1) # [-1, H, W, 2]
+#         flow = tf.stack([y, x], axis=-1) - iyx
+#         return tfa.image.dense_image_warp(img, -flow)    
 
 
 def scale_pyramid(img, pool_size0, pool_size1, num_scales):
@@ -68,16 +78,17 @@ def dgc_net(training, mask=False):
     corr1 = tf.math.l2_normalize(tf.nn.relu(corr1), axis=-1, epsilon=1e-6)
 
     # correspondence map decoding, for each level of the feature pyramid
-    init_map = tf.zeros_like(corr1[:,:,:,:2])
+    init_gx, init_gy = tf.meshgrid(tf.linspace(-1.0, 1.0, 15), tf.linspace(-1.0, 1.0, 15))
+    init_map = tf.stack([init_gy[None], init_gx[None]], axis=-1)
+    init_map = tf.ones_like(corr1[:,:,:,:2]) * init_map
     est_grid = factory('level_4')([corr1, init_map], training=training)
     estimates_grid = [est_grid]
 
     upsampling_x2 = UpSampling2D(size=2, interpolation='bilinear')
-    inv_warp_flow = InvWarpFlow()
     for k in reversed(range(4)):
         p1, p2 = target_pyr[k], source_pyr[k]
         est_map = upsampling_x2(estimates_grid[-1])
-        p1_w = inv_warp_flow([p1, est_map])
+        p1_w = grid_sample(p1, est_map)
         est_map = factory(f'level_{k}')([p1_w, p2, est_map], training=training)
         estimates_grid.append(est_map)
 
@@ -91,19 +102,29 @@ def dgc_net(training, mask=False):
         # loss, metric during training
 
         # note disp is normalized disp
-        disp = Input(shape=(240, 240, 1), batch_size=batch_size, dtype='float32')
-        model = tf.keras.Model([img1, img2, disp], [])
+        dispL = Input(shape=(240, 240, 1), batch_size=batch_size, dtype='float32')
+        dispR = Input(shape=(240, 240, 1), batch_size=batch_size, dtype='float32')
+        model = tf.keras.Model([img1, img2, dispL, dispR], [])
 
-        flow = tf.concat([tf.zeros_like(disp), disp], axis=-1)
-        pyr_true = scale_pyramid(flow, 1, 2, 5)
-        pyr_true = [f * (15.0 * 2**i) for i, f in enumerate(pyr_true)]
+        # turn disp to correspondence grid (dispR = grid_sample(dispL, grid))
+        flow_x = 240 * tf.squeeze(dispR, axis=-1)
+        gx, gy = tf.meshgrid(tf.linspace(0.0, 240-1, 240), tf.linspace(0.0, 240-1, 240))
+        gy, gx = tf.expand_dims(gy, axis=0), tf.expand_dims(gx, axis=0)
+        gy += tf.zeros_like(flow_x)
+        gx += flow_x
+        gx = gx / (240-1) * 2 - 1
+        gy = gy / (240-1) * 2 - 1
+        grid = tf.stack([gy, gx], axis=-1)
+
+        # [15, 30, 60, 120, 240]
+        pyr_true = scale_pyramid(grid, 1, 2, 5) 
         pyr_pred = estimates_grid
 
         SCALE_FACTOR = [1, 1, 1, 1, 1]
         for s in range(5):
-            epe = tf.norm(pyr_pred[s] - pyr_true[s], axis=-1)
             if s == 4:
                 # end-point-error
+                epe = tf.norm(pyr_pred[s] - pyr_true[s], axis=-1) * (0.5*240)
                 pixel_error = tf.reduce_mean(epe)
                 model.add_metric(pixel_error, name='epe', aggregation='mean')
 
