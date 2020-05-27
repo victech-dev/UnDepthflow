@@ -36,7 +36,7 @@ flags.DEFINE_integer("img_width", 512, "Image width")
 flags.DEFINE_float("ssim_weight", 0.85, "Weight for using ssim loss in pixel loss")
 
 # for stereosv
-flags.DEFINE_string('loss_metric', 'l1-log', 'charbonnier, l1-log, log-l1')
+flags.DEFINE_string('loss_fn', 'l2norm', 'loss function')
 flags.DEFINE_integer("num_scales", 4, "Number of scales: 1/2^0, 1/2^1, ..., 1/2^(n-1)")
 
 # explicitly tell flags library to parse argv
