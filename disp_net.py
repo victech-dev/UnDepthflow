@@ -1,11 +1,11 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D, AveragePooling2D, LeakyReLU
 from tensorflow.keras import Sequential, Model, Input
-import tensorflow_addons as tfa
 import functools
 
 from opt_helper import opt
 from losses import charbonnier_loss
+from core_warp import inv_warp_flow
 
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
 _conv2d = functools.partial(Conv2D, padding='same', kernel_regularizer=_reg)
@@ -105,10 +105,6 @@ class PwcNet_Single(Layer):
     #     cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
     #     return cv
 
-    @staticmethod
-    def _inv_warp_flow(image, flow):
-        return tfa.image.dense_image_warp(image, -flow)
-
     def call(self, inputs):
         _, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = inputs[:6]
         _, feature2_2, feature2_3, feature2_4, feature2_5, feature2_6 = inputs[6:]
@@ -124,7 +120,7 @@ class PwcNet_Single(Layer):
             flow6 = tf.nn.relu(flow6)
 
         flow6to5 = upsampling_x2(flow6) * 2.0
-        feature2_5w = self._inv_warp_flow(feature2_5, flow6to5)
+        feature2_5w = inv_warp_flow(feature2_5, flow6to5)
         cv5 = self._cost_volumn(feature1_5, feature2_5w, d=4)
         flow5, _ = self._dec5(tf.concat([cv5, feature1_5, flow6to5], axis=3))
         flow5 = flow5 + flow6to5
@@ -134,7 +130,7 @@ class PwcNet_Single(Layer):
             flow5 = tf.nn.relu(flow5)
 
         flow5to4 = upsampling_x2(flow5) * 2.0
-        feature2_4w = self._inv_warp_flow(feature2_4, flow5to4)
+        feature2_4w = inv_warp_flow(feature2_4, flow5to4)
         cv4 = self._cost_volumn(feature1_4, feature2_4w, d=4)
         flow4, _ = self._dec4(tf.concat([cv4, feature1_4, flow5to4[:, :, :, 1:2]], axis=3))
         flow4 = flow4 + flow5to4
@@ -144,7 +140,7 @@ class PwcNet_Single(Layer):
             flow4 = tf.nn.relu(flow4)
 
         flow4to3 = upsampling_x2(flow4) * 2.0
-        feature2_3w = self._inv_warp_flow(feature2_3, flow4to3)
+        feature2_3w = inv_warp_flow(feature2_3, flow4to3)
         cv3 = self._cost_volumn(feature1_3, feature2_3w, d=4)
         flow3, _ = self._dec3(tf.concat([cv3, feature1_3, flow4to3[:, :, :, 1:2]], axis=3))
         flow3 = flow3 + flow4to3
@@ -154,7 +150,7 @@ class PwcNet_Single(Layer):
             flow3 = tf.nn.relu(flow3)
 
         flow3to2 = upsampling_x2(flow3) * 2.0
-        feature2_2w = self._inv_warp_flow(feature2_2, flow3to2)
+        feature2_2w = inv_warp_flow(feature2_2, flow3to2)
         cv2 = self._cost_volumn(feature1_2, feature2_2w, d=4)
         flow2_raw, f2 = self._dec2(tf.concat([cv2, feature1_2, flow3to2[:, :, :, 1:2]], axis=3))
         flow2_raw = flow2_raw + flow3to2
@@ -257,7 +253,7 @@ if __name__ == '__main__':
     import functools
 
     disp_net = create_model(training=False)
-    disp_net.load_weights('.results_stereosv/weights-010.h5')
+    disp_net.load_weights('.results_stereosv/weights-log.h5')
     disp_net.summary()
     predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
  
