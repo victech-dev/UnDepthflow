@@ -1,8 +1,8 @@
+import cv2
 import tensorflow as tf
 import os
 import numpy as np
 import utils
-import cv2
 import open3d as o3d
 from pathlib import Path
 import re
