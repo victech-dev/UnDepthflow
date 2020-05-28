@@ -1,103 +1,32 @@
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
 import tensorflow as tf
+from core_warp import grid_sample
 
-def inv_warp_flow(image, flo, name='inv_warp_flow'):
-    """Backward warping layer
+def inv_warp_flow(image, flow):
+    _, H, W, _ = tf.unstack(tf.shape(image))
+    Hf, Wf = tf.cast(H, tf.float32), tf.cast(W, tf.float32)
+    # Turn the flow into a query points on the grid space
+    gx, gy = tf.meshgrid(tf.linspace(0.0, Wf-1, W), tf.linspace(0.0, Hf-1, H))
+    gy = 2 * (gy + flow[:,:,:,0]) / (Hf - 1) - 1
+    gx = 2 * (gx + flow[:,:,:,1]) / (Wf - 1) - 1
+    grid = tf.stack([gy, gx], axis=-1)
+    return grid_sample(image, grid)
 
-    Implements a backward warping layer described in 
-    "Unsupervised Deep Learning for Optical Flow Estimation, Zhe Ren et al"
+'''
+from core_warp import inv_warp_flow
+import numpy as np
 
-    Parameters
-    ----------
-    image : float
-        The output of a convolutional net should have the
-        shape [num_batch, height, width, num_channels].
-    flo: float
-         The optical flow used to do the backward warping.
-         shape is [num_batch, height, width, 2]
-    """
+image = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=np.float32)
+image = np.reshape(image, [1, 3, 3, 1])
+print("*** Image:", np.squeeze(image))
 
-    def _interpolate_bilinear(im, xy, name='interpolate_bilinear'):
-        with tf.name_scope(name):
-            num_batch, height, width, channel = tf.unstack(tf.shape(im))
-            height_f, width_f = tf.cast(height, tf.float32), tf.cast(width, tf.float32)
+flo = np.zeros((1, 3, 3, 2), dtype=np.float32)
+flo[0, 1, 1, 1] = 1.0
 
-            x, y = tf.unstack(xy, axis=-1)
-            x0f = tf.clip_by_value(tf.floor(x), 0.0, width_f-2.0)
-            y0f = tf.clip_by_value(tf.floor(y), 0.0, height_f-2.0)
-            x0, y0 = tf.cast(x0f, tf.int32), tf.cast(y0f, tf.int32)
-            x1, y1 = x0 + 1, y0 + 1
-            xa, ya = tf.clip_by_value(x - x0f, 0, 1), tf.clip_by_value(y - y0f, 0, 1)
-            xa, ya = tf.expand_dims(xa, -1), tf.expand_dims(ya, -1)
+# output should be [[1,2,3],[4,6,6],[7,8,9]]
+image2 = inv_warp_flow(image, flo)
+print("*** Image:", np.squeeze(image2))
 
-            batch_offsets = tf.range(num_batch) * width * height
-            batch_offsets = batch_offsets[:,None]
-            flattened_grid = tf.reshape(im, (num_batch * width * height, channel))
-
-            def gather(y_coords, x_coords, name):
-                with tf.name_scope('gather-' + name):
-                    linear_coordinates = batch_offsets + y_coords * width + x_coords
-                    gathered_values = tf.gather(flattened_grid, linear_coordinates)
-                    return tf.reshape(gathered_values, [num_batch, height * width, channel])
-
-            top_left = gather(y0, x0, 'top_left')
-            top_right = gather(y0, x1, 'top_right')
-            bottom_left = gather(y1, x0, 'bottom_left')
-            bottom_right = gather(y1, x1, 'bottom_right')    
-
-            # now, do the actual interpolation
-            with tf.name_scope('interpolate'):
-                interp_top = xa * (top_right - top_left) + top_left
-                interp_bottom = xa * (bottom_right - bottom_left) + bottom_left
-                interp = ya * (interp_bottom - interp_top) + interp_top                            
-
-            return interp
-
-    with tf.name_scope(name):
-        num_batch, height, width, num_channels = tf.unstack(tf.shape(image))
-        height_f, width_f = tf.cast(height, tf.float32), tf.cast(width, tf.float32)
-
-        # Turn the flow into a list of query points on the grid space
-        gx, gy = tf.meshgrid(tf.linspace(0.0, width_f-1, width), tf.linspace(0.0, height_f-1, height))
-        gxy = tf.stack([gx[None], gy[None]], axis=-1) + flo
-        gxy_flatten = tf.reshape(gxy, [num_batch, height*width, 2])
-
-        input_transformed = _interpolate_bilinear(image, gxy_flatten)
-        output = tf.reshape(
-            input_transformed,
-            tf.stack([num_batch, height, width, num_channels]))
-        return output
-
-if __name__ == '__main__':
-    import numpy as np
-
-    image = tf.constant(
-        [1, 2, 3, 4, 5, 6, 7, 8, 9], shape=[1, 3, 3, 1], dtype="float32")
-    print("*** Image:", tf.squeeze(image))
-
-    flo = np.zeros((1, 3, 3, 2))
-    flo[0, 1, 1, 0] = 1.0
-    #flo[0, 1, 1, 1] = 1.0
-    flo = tf.constant(flo, dtype="float32")
-
-    # output should be [[1,2,3],[4,6,6],[7,8,9]]
-    image2 = inv_warp_flow(image, flo)
-    print("*** Image:", tf.squeeze(image2))
-
-    import tensorflow_addons as tfa
-    flo_yx = flo[:,:,:,::-1]
-    image3 = tfa.image.dense_image_warp(image, -flo_yx)
-    print("*** Image from tfa:", tf.squeeze(image3))
+# import tensorflow_addons as tfa
+# image3 = tfa.image.dense_image_warp(image, -flo)
+# print("*** Image from tfa:", tf.squeeze(image3))
+'''

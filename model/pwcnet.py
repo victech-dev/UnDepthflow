@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer, Conv2D, UpSampling2D, AveragePooling2D, Conv2DTranspose
 from tensorflow.keras import Sequential, Model, Input
 import tensorflow_addons as tfa
+from core_warp import inv_warp_flow
 import functools
 
 from opt_helper import opt
@@ -99,21 +100,17 @@ class FlowPyramid(Layer):
 
     @staticmethod
     def _cost_volumn(feature1, feature2, d=4):
-        # cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
-        _, H, W, _ = tf.unstack(tf.shape(feature1))
-        feature2 = tf.pad(feature2, [[0, 0], [d, d], [d, d], [0, 0]], "CONSTANT")
-        cv = []
-        for i in range(2 * d + 1):
-            for j in range(2 * d + 1):
-                cv.append(tf.reduce_mean(
-                    feature1 * feature2[:, i:(i+H), j:(j+W), :],
-                    axis=3, keepdims=True))
-        cv = tf.concat(cv, axis=3)
+        cv = tfa.layers.CorrelationCost(1, d, 1, 1, d, 'channels_last')([feature1, feature2])
+        # _, H, W, _ = tf.unstack(tf.shape(feature1))
+        # feature2 = tf.pad(feature2, [[0, 0], [d, d], [d, d], [0, 0]], "CONSTANT")
+        # cv = []
+        # for i in range(2 * d + 1):
+        #     for j in range(2 * d + 1):
+        #         cv.append(tf.reduce_mean(
+        #             feature1 * feature2[:, i:(i+H), j:(j+W), :],
+        #             axis=3, keepdims=True))
+        # cv = tf.concat(cv, axis=3)
         return tf.nn.leaky_relu(cv, alpha=0.1)
-
-    @staticmethod
-    def _inv_warp_flow(image, flow):
-        return tfa.image.dense_image_warp(image, -flow)
 
     def call(self, inputs):
         _, feature1_2, feature1_3, feature1_4, feature1_5, feature1_6 = inputs[:6]
@@ -121,28 +118,28 @@ class FlowPyramid(Layer):
 
         cv6 = self._cost_volumn(feature1_6, feature2_6, d=4)
         flow6, feat6 = self._dec6(cv6)
-        upflow6 = self._upflow6(flow6) * 0.625
+        upflow6 = self._upflow6(flow6)
         upfeat6 = self._upfeat6(feat6)
 
-        feature2_5w = self._inv_warp_flow(feature2_5, upflow6)
+        feature2_5w = inv_warp_flow(feature2_5, upflow6 * 0.625)
         cv5 = self._cost_volumn(feature1_5, feature2_5w, d=4)
         flow5, feat5 = self._dec5(tf.concat([cv5, feature1_5, upflow6, upfeat6], axis=-1))
-        upflow5 = self._upflow5(flow5) * 1.25
+        upflow5 = self._upflow5(flow5)
         upfeat5 = self._upfeat5(feat5)
 
-        feature2_4w = self._inv_warp_flow(feature2_4, upflow5)
+        feature2_4w = inv_warp_flow(feature2_4, upflow5 * 1.25)
         cv4 = self._cost_volumn(feature1_4, feature2_4w, d=4)
         flow4, feat4 = self._dec4(tf.concat([cv4, feature1_4, upflow5, upfeat5], axis=-1))
-        upflow4 = self._upflow4(flow4) * 2.5
+        upflow4 = self._upflow4(flow4)
         upfeat4 = self._upfeat4(feat4)
 
-        feature2_3w = self._inv_warp_flow(feature2_3, upflow4)
+        feature2_3w = inv_warp_flow(feature2_3, upflow4 * 2.5)
         cv3 = self._cost_volumn(feature1_3, feature2_3w, d=4)
         flow3, feat3 = self._dec3(tf.concat([cv3, feature1_3, upflow4, upfeat4], axis=3))
-        upflow3 = self._upflow3(flow3) * 5
+        upflow3 = self._upflow3(flow3)
         upfeat3 = self._upfeat3(feat3)
 
-        feature2_2w = self._inv_warp_flow(feature2_2, upflow3)
+        feature2_2w = inv_warp_flow(feature2_2, upflow3 * 5)
         cv2 = self._cost_volumn(feature1_2, feature2_2w, d=4)
         flow2, feat2 = self._dec2(tf.concat([cv2, feature1_2, upflow3, upfeat3], axis=3))
         flow2 = self._cn([flow2, feat2])
@@ -166,7 +163,7 @@ def create_model(training=False):
     imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
     imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
 
-    feat = FeaturePyramid(name='feature_net_disp')
+    feat = FeaturePyramid(name='feature_pyramid')
     flow = FlowPyramid(name='flow_pyramid')
 
     featL = feat(imgL)

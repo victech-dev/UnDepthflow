@@ -27,6 +27,7 @@ if __name__ == '__main__':
         else:
             lr = float(opt.learning_rate)
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
+        model.summary()
 
     callbacks = []
     callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}.h5'), save_weights_only=True, save_best_only=False))
