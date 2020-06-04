@@ -3,7 +3,6 @@ import tensorflow as tf
 import os
 import numpy as np
 import utils
-import open3d as o3d
 from pathlib import Path
 import re
 from tqdm import tqdm
@@ -12,7 +11,7 @@ import functools
 
 from disp_net import create_model
 from opt_helper import opt, autoflags
-from estimate import NavScene, tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
+from estimate import tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
 
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
@@ -56,7 +55,7 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     topdown, zn = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
     cte, ye = get_visual_odometry(topdown, zn, max_angle=30)
     t1 = time.time()
-    print("* elspaed:", Path(imgnameL).stem, t1 - t0, "cte:", cte, "ye:", ye)
+    print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye)
 
     # display minimap
     minimap = get_minimap(topdown, zn, cte, ye)
@@ -129,6 +128,8 @@ def export_to_frozen_saved_model():
     img, depth, K = predict_tmap(tf_pred_loaded_wrapped, str(imgnameL), str(imgnameR))
 
 if __name__ == '__main__':
+    from estimate.vis import NavScene
+
     autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1

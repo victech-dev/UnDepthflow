@@ -1,9 +1,8 @@
-import numpy as np
 import open3d as o3d
-from pathlib import Path
+import numpy as np
 import functools
 from scipy.spatial.transform import Rotation as R
-
+from estimate.pcl import populate_pcd
 
 def _create_axis_bar():
     LEN, DIV, RADIUS = 20, 1, 0.02
@@ -25,14 +24,6 @@ def _create_axis_bar():
 COORD_FRAMES = _create_axis_bar()
 
 
-def populate_pcd(depth, K):
-    H, W = depth.shape[:2]
-    py, px = np.mgrid[:H,:W]
-    xyz = np.stack([px, py, np.ones_like(px)], axis=-1) * np.atleast_3d(depth)
-    xyz = np.reshape(xyz, (-1, 3)) @ np.linalg.inv(K).T
-    return xyz
-
-        
 def show_pcd(img, depth, K):
     ''' visualize point cloud for single scene'''
     assert np.all(img.shape[:2] == depth.shape[:2]) and img.shape[2] == 3 and img.dtype == np.uint8
