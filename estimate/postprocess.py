@@ -41,15 +41,23 @@ class PopulatePointCloud(Layer):
 
 
 def tf_detect_plane_xz(xyz):
+    def _outer_prod3(vec3):
+        x, y, z = tf.unstack(vec3, axis=-1)
+        x2, y2, z2, xy, yz, zx = x**2, y**2, z**2, x*y, y*z, z*x
+        c0 = tf.stack([x2, xy, zx], axis=-1)
+        c1 = tf.stack([xy, y2, yz], axis=-1)
+        c2 = tf.stack([zx, yz, z2], axis=-1)
+        return tf.stack([c0, c1, c2], axis=-1)
+
     # Calculate covariance matrix of neighboring points
     # http://jacoposerafin.com/wp-content/uploads/bogoslavskyi13ecmr.pdf
     ksize = 5
     P = tf.nn.avg_pool2d(xyz, ksize, 1, 'SAME')
-    xyz2 = xyz[:,:,:,:,None] @ xyz[:,:,:,None,:]
+    xyz2 = _outer_prod3(xyz)
     xyz2_4d = tf.reshape(xyz2, tf.concat([tf.shape(xyz2)[:-2], [9]], 0))
     S_4d = tf.nn.avg_pool2d(xyz2_4d, ksize, 1, 'SAME')
     S = tf.reshape(S_4d, tf.concat([tf.shape(S_4d)[:-1], [3, 3]], 0))
-    sigma = S - P[:,:,:,:,None] @ P[:,:,:,None,:]
+    sigma = S - _outer_prod3(P)
 
     # eigenvalue solver of 3x3 symmetric matrix
     # much faster than tf.linalg.eigh when input is multiple matrices
