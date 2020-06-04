@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 from opt_helper import opt, autoflags
-from disp_net import create_model
+from disp_net import DispNet
 from dataloader import batch_from_dataset
 
 STEPS_PER_EPOCH = 10000
@@ -18,18 +18,19 @@ if __name__ == '__main__':
     strategy = tf.distribute.MirroredStrategy()
     print('* Number of devices: ', strategy.num_replicas_in_sync)
     with strategy.scope():
-        model = create_model(training=True)
+        disp_net = DispNet('train')
         # Cosine annealing lr if required
         if isinstance(opt.learning_rate, (list, tuple)):
             lr = list(map(float, opt.learning_rate))
             lr = tf.keras.experimental.CosineDecay(lr[0], opt.num_iterations, alpha=lr[1]/lr[0])
         else:
             lr = float(opt.learning_rate)
-        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
+        disp_net.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
+        disp_net.model.summary()
 
     callbacks = []
     callbacks.append(ModelCheckpoint(os.path.join(opt.trace, 'weights-{epoch:03d}.h5'), save_weights_only=True, save_best_only=False))
     callbacks.append(TensorBoard(log_dir=opt.trace, update_freq=100))
 
     ds_trn = batch_from_dataset()
-    model.fit(ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)
+    disp_net.model.fit(ds_trn, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS, verbose=1, callbacks=callbacks)

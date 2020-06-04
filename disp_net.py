@@ -187,22 +187,29 @@ def scale_pyramid(img, pool_size0, pool_size1, num_scales):
     return scaled_imgs
 
 
-def create_model(training=False):
-    batch_size = opt.batch_size if training else 1
-    imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
-    imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
+class DispNet(object):
+    def __init__(self, mode):
+        assert mode == 'train' or mode == 'test'
+        self.feat = FeaturePyramid(name='feature_net_disp')
+        self.pwcL = PwcNet_Single(name='left_disp')
+        self.pwcR = PwcNet_Single(name='right_disp')
+        self.mode = mode
+        self.model = self.build_model()
 
-    feat = FeaturePyramid(name='feature_net_disp')
-    pwcL = PwcNet_Single(name='left_disp')
-    pwcR = PwcNet_Single(name='right_disp')
+    def build_model(self):
+        batch_size = opt.batch_size if self.mode=='train' else 1
+        imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
+        imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=batch_size, dtype='float32')
 
-    featL = feat(imgL)
-    featR = feat(imgR)
-    pyrL_pred = pwcL(featL + featR)
-    pyrR_pred = pwcR(featR + featL)
+        featL = self.feat(imgL)
+        featR = self.feat(imgR)
+        pyrL_pred = self.pwcL(featL + featR)
+        pyrR_pred = self.pwcR(featR + featL)
 
-    if training == True:
-        # loss, metric during training
+        if self.mode == 'test':
+            return tf.keras.Model([imgL, imgR], pyrL_pred[:1] + pyrR_pred[:1])
+
+        # train mode
         dispL = Input(shape=(opt.img_height, opt.img_width, 1), batch_size=batch_size, dtype='float32')
         dispR = Input(shape=(opt.img_height, opt.img_width, 1), batch_size=batch_size, dtype='float32')
         model = tf.keras.Model([imgL, imgR, dispL, dispR], [])
@@ -217,31 +224,27 @@ def create_model(training=False):
                 # end-point-error
                 pixel_error = 0.5 * tf.reduce_mean(epeL + epeR)
                 model.add_metric(pixel_error, name='epe', aggregation='mean')
-                # depth error w.r.t reference camera
-                ref_fxb = 45.13725045708206 # reference f*b = 467.83661057 * 0.120601 * (512/640)
-                max_depth = 50.0
-                disp2depth = lambda x: tf.clip_by_value(ref_fxb / tf.maximum(opt.img_width * x, 1e-6), 0.0, max_depth)
-                depthL_true, depthL_pred, depthR_true, depthR_pred = map(disp2depth, [pyrL_true[s], pyrL_pred[s], pyrR_true[s], pyrR_pred[s]])
-                depth_error = 0.5 * tf.reduce_mean(tf.abs(depthL_pred - depthL_true) + tf.abs(depthR_pred - depthR_true))
-                model.add_metric(depth_error, name='depth_error', aggregation='mean')
 
             if opt.loss_metric == 'l1-log': # l1 of log
                 eps = 1e-6
                 left_error = tf.abs(tf.math.log(eps + pyrL_true[s]) - tf.math.log(eps + pyrL_pred[s]))
                 right_error = tf.abs(tf.math.log(eps + pyrR_true[s]) - tf.math.log(eps + pyrR_pred[s]))
                 loss = tf.reduce_mean(left_error + right_error)
-            elif opt.loss_metric == 'log-l1': # log of l1
-                left_error = tf.math.log(1.0 + epeL)
-                right_error = tf.math.log(1.0 + epeR)
-                loss = tf.reduce_mean(left_error + right_error)
             elif opt.loss_metric == 'charbonnier':
                 loss = 0.1 * (charbonnier_loss(epeL) + charbonnier_loss(epeR))
             else:
                 raise ValueError('! Unsupported loss metric')
             model.add_loss(SCALE_FACTOR[s] * loss, inputs=True)
-    else:
-        model = tf.keras.Model([imgL, imgR], pyrL_pred[:1] + pyrR_pred[:1])
-    return model
+        return model
+
+    def build_test(self):
+        assert self.mode == 'test'
+        imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
+        imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
+        featL = self.feat(imgL)
+        featR = self.feat(imgR)
+        pyrL_pred = self.pwcL(featL + featR)
+        return tf.keras.Model([imgL, imgR], pyrL_pred[0])
 
 
 if __name__ == '__main__':
@@ -252,10 +255,11 @@ if __name__ == '__main__':
     import utils
     import functools
 
-    disp_net = create_model(training=False)
-    disp_net.load_weights('.results_stereosv/weights-log.h5')
-    disp_net.summary()
-    predict = tf.function(functools.partial(disp_net.call, training=None, mask=None))
+    disp_net = DispNet('test')
+    disp_net.model.load_weights('.results_stereosv/weights-log.h5')
+    disp_net.model.summary()
+    test_model = disp_net.build_test()
+    predict = tf.function(functools.partial(test_model.call, training=False))
  
     # point cloud test of office image of inbo.yeo 
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
@@ -269,9 +273,9 @@ if __name__ == '__main__':
         imgL, imgR = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
 
         t0 = time.time()
-        dispL, _ = predict([imgL[None], imgR[None]])
-        t1 = time.time()
+        dispL = predict([imgL[None], imgR[None]])
         disp = dispL[0].numpy()
+        t1 = time.time()
         print("* elspaed:", t1 - t0, np.min(disp), np.max(disp))
         if utils.imshow(disp) == 27:
             break

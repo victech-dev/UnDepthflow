@@ -9,7 +9,7 @@ from tqdm import tqdm
 import time
 import functools
 
-from disp_net import create_model
+from disp_net import DispNet
 from opt_helper import opt, autoflags
 from estimate import tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
 
@@ -136,10 +136,10 @@ if __name__ == '__main__':
     opt.pretrained_model = '.results_stereosv/weights-log.h5'
 
     print('* Restoring model')
-    disp_net = create_model(training=False)
-    disp_net.load_weights(opt.pretrained_model)
+    disp_net = DispNet('test')
+    disp_net.model.load_weights(opt.pretrained_model)
     tmap_dec = tmap_decoder(disp_net)
-    tf_pred = tf.function(functools.partial(tmap_dec.call, training=None, mask=None))
+    tf_pred = tf.function(functools.partial(tmap_dec.call, training=False))
 
     ''' point cloud test of office image of inbo.yeo '''
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')

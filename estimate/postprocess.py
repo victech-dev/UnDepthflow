@@ -84,7 +84,10 @@ def tmap_decoder(disp_net):
     baseline = Input(shape=(), batch_size=1, dtype='float32')
 
     # decode disparity
-    disp, _ = disp_net([imgL, imgR])
+    featL = disp_net.feat(imgL)
+    featR = disp_net.feat(imgR)
+    pyr_disp = disp_net.pwcL(featL + featR)
+    disp = pyr_disp[0]
 
     # rescale intrinsic
     _, h1, w1, _ = tf.unstack(tf.shape(disp))
