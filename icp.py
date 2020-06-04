@@ -78,19 +78,18 @@ if __name__ == "__main__":
     from pathlib import Path
     import time
 
-    from estimate import populate_pcd
+    from estimate import populate_pc
     import utils
 
-    K_org, baseline = utils.query_K('victech')
-    K_new = utils.rescale_K(K_org, (640, 480), (128, 96))
+    nK, baseline = utils.query_nK('victech')
 
     for i in range(3, 90):
         root_dir = Path("M:\\Users\\sehee\\camera_taker\\undist_fisheye\\depthL")
         print('* ICP:', i, i+1)
         depth1 = cv2.imread(str(root_dir/f'{i:06d}.pfm'), -1)
         depth2 = cv2.imread(str(root_dir/f'{i+1:06d}.pfm'), -1)
-        pc1 = populate_pcd(depth1, K_new)
-        pc2 = populate_pcd(depth2, K_new)
+        pc1 = populate_pc(depth1, nK)
+        pc2 = populate_pc(depth2, nK)
 
         t0 = time.time()
         tfm = cv2_solve_icp(pc1, pc2)

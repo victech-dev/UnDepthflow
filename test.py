@@ -2,7 +2,6 @@ import cv2
 import tensorflow as tf
 import os
 import numpy as np
-import utils
 from pathlib import Path
 import re
 from tqdm import tqdm
@@ -12,6 +11,7 @@ import functools
 from disp_net import DispNet
 from opt_helper import opt, autoflags
 from estimate import tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
+import utils
 
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
@@ -40,19 +40,18 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     imgL = utils.imread(imgnameL)
     imgR = utils.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
-    K, baseline = utils.query_K(cat)
+    nK, baseline = utils.query_nK(cat)
     baseline = np.array(baseline, np.float32)
 
     # rescale to fit nn-input
-    imgL_fit, imgR_fit, K_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32, K)
+    imgL_fit, imgR_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
 
     # calculate cte/ye
     t0 = time.time()
-    depth, tmap = tf_pred([imgL_fit[None], imgR_fit[None], K_fit[None], baseline[None]])
+    depth, tmap = tf_pred([imgL_fit[None], imgR_fit[None], nK[None], baseline[None]])
     depth = cv2.resize(np.squeeze(depth), (width, height))
     tmap = np.squeeze(tmap)
-    K_tmap = utils.rescale_K(K, (width, height), (tmap.shape[1], tmap.shape[0]))
-    topdown, zn = warp_topdown(tmap, K_tmap, elevation=0.5, fov=5, ppm=20)
+    topdown, zn = warp_topdown(tmap, nK, elevation=0.5, fov=5, ppm=20)
     cte, ye = get_visual_odometry(topdown, zn, max_angle=30)
     t1 = time.time()
     print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye)
@@ -67,7 +66,7 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     alpha = np.atleast_3d(1 - 0.5 * tmap_enlarged)
     img_to_show = np.clip(imgL * alpha + green * (1 - alpha), 0, 255).astype(np.uint8)
 
-    return img_to_show, depth, K
+    return img_to_show, depth, nK
 
 def export_to_frozen_saved_model():
     # Workaround for 'TensorFlow Failed to get convolution algorithm'
@@ -81,8 +80,8 @@ def export_to_frozen_saved_model():
     opt.pretrained_model = '.results_stereosv/weights-log.h5'
 
     print('* Restoring model')
-    disp_net = create_model(training=False)
-    disp_net.load_weights(opt.pretrained_model)
+    disp_net = DispNet('test')
+    disp_net.model.load_weights(opt.pretrained_model)
     tmap_dec = tmap_decoder(disp_net)
 
     tf_pred = tf.function(functools.partial(tmap_dec.call, training=None, mask=None))
@@ -125,7 +124,7 @@ def export_to_frozen_saved_model():
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
     imgnameL = imgnamesL[10 % len(imgnamesL)]
     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-    img, depth, K = predict_tmap(tf_pred_loaded_wrapped, str(imgnameL), str(imgnameR))
+    img, depth, nK = predict_tmap(tf_pred_loaded_wrapped, str(imgnameL), str(imgnameR))
 
 if __name__ == '__main__':
     from estimate.vis import NavScene
@@ -147,8 +146,8 @@ if __name__ == '__main__':
     def ns_feeder(index):
         imgnameL = imgnamesL[index % len(imgnamesL)]
         imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-        img, depth, K = predict_tmap(tf_pred, str(imgnameL), str(imgnameR))
-        return img, np.clip(depth, 0, 30), K
+        img, depth, nK = predict_tmap(tf_pred, str(imgnameL), str(imgnameR))
+        return img, np.clip(depth, 0, 30), nK
 
     ''' generate disparity map prediction '''
     # for imgnameL in tqdm(imgnamesL):

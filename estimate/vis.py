@@ -2,7 +2,7 @@ import open3d as o3d
 import numpy as np
 import functools
 from scipy.spatial.transform import Rotation as R
-from estimate.pcl import populate_pcd
+from estimate.pcl import populate_pc
 
 def _create_axis_bar():
     LEN, DIV, RADIUS = 20, 1, 0.02
@@ -24,10 +24,10 @@ def _create_axis_bar():
 COORD_FRAMES = _create_axis_bar()
 
 
-def show_pcd(img, depth, K):
+def show_pcd(img, depth, nK):
     ''' visualize point cloud for single scene'''
     assert np.all(img.shape[:2] == depth.shape[:2]) and img.shape[2] == 3 and img.dtype == np.uint8
-    xyz = populate_pcd(depth, K)
+    xyz = populate_pc(depth, nK)
     rgb = np.reshape(img, (-1, 3)) / 255
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz)
@@ -67,8 +67,8 @@ class NavScene(object):
         if key == 'next':
             self.index += 1
 
-        img, depth, K = self.feeder(self.index)
-        xyz = populate_pcd(depth, K)
+        img, depth, nK = self.feeder(self.index)
+        xyz = populate_pc(depth, nK)
         rgb = np.reshape(img, (-1, 3)) / 255
         self.pcd.points = o3d.utility.Vector3dVector(xyz)
         self.pcd.colors = o3d.utility.Vector3dVector(rgb)

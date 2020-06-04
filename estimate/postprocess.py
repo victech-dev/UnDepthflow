@@ -3,16 +3,41 @@ from tensorflow.keras.layers import Layer, Input
 import numpy as np
 import cv2
 from opt_helper import opt
+import utils
 
+class PopulatePointCloud(Layer):
+    def __init__(self, *args, **kwargs):
+        super(PopulatePointCloud, self).__init__(*args, **kwargs)
+        self._grid = None
+        self._H = 0
+        self._W = 0
 
-def tf_populate_pcd(depth, K):
-    K_inv = tf.linalg.inv(K)
-    _, H, W, _ = tf.unstack(tf.shape(depth))
-    px, py = tf.meshgrid(tf.range(W), tf.range(H))
-    px, py = tf.cast(px, tf.float32), tf.cast(py, tf.float32)
-    xyz = tf.stack([px, py, tf.ones_like(px)], axis=-1)[None] * depth
-    xyz = tf.squeeze(K_inv[:,None,None,:,:] @ xyz[:,:,:,:,None], axis=-1) # [b, H, W, 3]
-    return xyz
+    def build(self, input_shape):
+        depth_shape = input_shape[0]
+        self._H, self._W = depth_shape[1:3]
+        gx, gy = np.meshgrid(np.arange(self._W), np.arange(self._H))
+        grid = np.stack([gx, gy, np.ones_like(gx)], axis=-1)[None]
+        grid = grid.astype(np.float32)
+        init_grid = tf.constant_initializer(grid)
+        self._grid = self.add_weight(shape=(1, self._H, self._W, 3), initializer=init_grid, trainable=False)
+
+    def call(self, inputs):
+        depth, nK = inputs
+
+        # convert nK(= normalized K) to inv_K
+        H, W = self._H, self._W
+        iH, iW = 1/H, 1/W
+        infx, ncx = 1/nK[:,0,0], nK[:,0,2]
+        infy, ncy = 1/nK[:,1,1], nK[:,1,2]
+        iK00, iK02 = iW*infx, infx*(0.5*iW - ncx)
+        iK11, iK12 = iH*infy, infy*(0.5*iH - ncy)
+
+        xyz = depth * self._grid
+        x, y, z = tf.unstack(xyz, axis=-1)
+        tx = iK00[:,None,None] * x + iK02[:,None,None] * z
+        ty = iK11[:,None,None] * y + iK12[:,None,None] * z
+        tz = z
+        return tf.stack([tx, ty, tz], axis=-1)
 
 
 def tf_detect_plane_xz(xyz):
@@ -77,10 +102,9 @@ def tf_detect_plane_xz(xyz):
 
 ''' Traversability map decoder '''
 def tmap_decoder(disp_net):
-    # Note K0 should already be scaled from original image size to nn-input size 
     imgL = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
     imgR = Input(shape=(opt.img_height, opt.img_width, 3), batch_size=1, dtype='float32')
-    K0 = Input(shape=(3, 3), batch_size=1, dtype='float32')
+    nK = Input(shape=(3, 3), batch_size=1, dtype='float32')
     baseline = Input(shape=(), batch_size=1, dtype='float32')
 
     # decode disparity
@@ -89,18 +113,12 @@ def tmap_decoder(disp_net):
     pyr_disp = disp_net.pwcL(featL + featR)
     disp = pyr_disp[0]
 
-    # rescale intrinsic
-    _, h1, w1, _ = tf.unstack(tf.shape(disp))
-    rw = tf.cast(w1, tf.float32) / opt.img_width
-    rh = tf.cast(h1, tf.float32) / opt.img_height
-    K_scale = tf.convert_to_tensor([[rw, 0, 0.5*(rw-1)], [0, rh, 0.5*(rh-1)], [0, 0, 1]], dtype=tf.float32)
-    K1 = K_scale[None,:,:] @ K0
-
     # construct point cloud
-    fxb = K1[:,0,0] * baseline
-    disp = tf.cast(w1, tf.float32) * tf.maximum(disp, 1e-6)
+    W = disp.shape[2]
+    fxb = (nK[:,0,0] * W) * baseline
+    disp = W * tf.maximum(disp, 1e-6)
     depth = fxb[:,None,None,None] / disp
-    xyz = tf_populate_pcd(depth, K1)
+    xyz = PopulatePointCloud()([depth, nK])
 
     # detect xz-plane from pcd
     plane_xz = tf_detect_plane_xz(xyz)
@@ -110,19 +128,20 @@ def tmap_decoder(disp_net):
     # Condition 2: y component of normal vector
     cond2 = tf.cast(plane_xz > 0.85, tf.float32)
 
-    return tf.keras.Model([imgL, imgR, K0, baseline], [depth, cond1 * cond2])
+    return tf.keras.Model([imgL, imgR, nK, baseline], [depth, cond1 * cond2])
 
 
-def warp_topdown(img, K, elevation, fov=5, ppm=20):
+def warp_topdown(img, nK, elevation, fov=5, ppm=20):
     '''
     img: image to warp
-    K: camera intrinsic
+    nK: normalized camera intrinsic
     elevation: elevation of floor w.r.t the camera (= camera height from floor)
     fov: field of view as meter
     ppm: pixel per meter, new image size = (2* fov * ppm, fov * ppm)
     '''
     # let zn = z [n]ear = minimum z among floor pixels (elevation below camera)
     # this can be calculated from eq K * [0 elevation zn].T = zn * [0 imgH-1 1].T
+    K = utils.unnormalize_K(nK, (img.shape[1], img.shape[0]))
     fy, cy = K[1,1], K[1,2]
     zn = fy * elevation / (img.shape[0] - 1 - cy)
 
