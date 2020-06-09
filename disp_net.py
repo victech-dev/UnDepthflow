@@ -241,7 +241,7 @@ if __name__ == '__main__':
     import functools
 
     disp_net = DispNet('test')
-    disp_net.model.load_weights('.results_stereosv/weights-066.h5')
+    disp_net.model.load_weights('.results_stereosv/weights-log.h5')
     disp_net.model.summary()
     test_model = disp_net.build_test()
     predict = tf.function(functools.partial(test_model.call, training=False))
