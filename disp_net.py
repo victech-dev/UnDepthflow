@@ -262,6 +262,6 @@ if __name__ == '__main__':
         disp = dispL[0].numpy()
         t1 = time.time()
         print("* elspaed:", t1 - t0, np.min(disp), np.max(disp))
-        if utils.imshow(disp) == 27:
+        if utils.imshow(disp, norm='gray') == 27:
             break
         #utils.imshow(disp0)

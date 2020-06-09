@@ -10,7 +10,7 @@ import functools
 
 from disp_net import DispNet
 from opt_helper import opt, autoflags
-from estimate import tmap_decoder, warp_topdown, get_visual_odometry, get_minimap
+from estimate import tmap_decoder, generate_gmap, get_visual_odometry, get_minimap
 import utils
 
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
@@ -28,25 +28,20 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
 
     # calculate cte/ye
     t0 = time.time()
-    depth, tmap = tf_pred([imgL_fit[None], imgR_fit[None], nK[None], baseline[None]])
-    depth = cv2.resize(np.squeeze(depth), (width, height))
-    tmap = np.squeeze(tmap)
-    topdown, zn = warp_topdown(tmap, nK, elevation=0.5, fov=5, ppm=20)
-    cte, ye = get_visual_odometry(topdown, zn, max_angle=30)
+    p_abs, depth = tf_pred([imgL_fit[None], imgR_fit[None], nK[None], baseline[None]])
+    depth = np.squeeze(depth)
+    p_abs = np.squeeze(p_abs)
+    gmap, eoa = generate_gmap(p_abs, nK)
+    cte, ye = get_visual_odometry(gmap)
     t1 = time.time()
-    print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye)
+    print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye, "eoa:", eoa)
 
     # display minimap
-    minimap = get_minimap(topdown, zn, cte, ye)
+    minimap = get_minimap(gmap, cte, ye)
     utils.imshow(minimap, wait=False)
 
-    # mark traversability to pcd image
-    green = np.full((height, width, 3), (0, 255, 0), np.uint8)
-    tmap_enlarged = cv2.resize(tmap, (width, height), interpolation=cv2.INTER_NEAREST)
-    alpha = np.atleast_3d(1 - 0.5 * tmap_enlarged)
-    img_to_show = np.clip(imgL * alpha + green * (1 - alpha), 0, 255).astype(np.uint8)
-
-    return img_to_show, depth, nK
+    depth = cv2.resize(np.squeeze(depth), (width, height))    
+    return imgL, depth, nK
 
 def export_to_frozen_saved_model():
     # Workaround for 'TensorFlow Failed to get convolution algorithm'
@@ -62,9 +57,7 @@ def export_to_frozen_saved_model():
     print('* Restoring model')
     disp_net = DispNet('test')
     disp_net.model.load_weights(opt.pretrained_model)
-    tmap_dec = tmap_decoder(disp_net)
-
-    tf_pred = tf.function(functools.partial(tmap_dec.call, training=None, mask=None))
+    tf_pred = tf.function(functools.partial(tmap_decoder(disp_net).call, training=False))
     tf_pred_concrete = tf_pred.get_concrete_function(
         (tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imL"),
         tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imR"),
@@ -112,13 +105,13 @@ if __name__ == '__main__':
     autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
-    opt.pretrained_model = '.results_stereosv/weights-067.h5'
+    opt.pretrained_model = '.results_stereosv/weights-log.h5'
 
     print('* Restoring model')
     disp_net = DispNet('test')
     disp_net.model.load_weights(opt.pretrained_model)
-    tmap_dec = tmap_decoder(disp_net)
-    tf_pred = tf.function(functools.partial(tmap_dec.call, training=False))
+    pred_model = tmap_decoder(disp_net, with_depth=True)
+    tf_pred = tf.function(functools.partial(pred_model.call, training=False))
 
     ''' point cloud test of office image of inbo.yeo '''
     data_dir = Path('M:\\Users\\sehee\\camera_taker_200608\\undist_fisheye')
