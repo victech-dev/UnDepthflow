@@ -18,7 +18,7 @@ def imshow(img, name='imshow', wait=True, norm='color'):
     img = np.atleast_3d(img)
     if img.shape[2] == 3: # rgb 2 bgr
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    elif norm and img.shape[2] == 1: # single channel
+    elif norm and img.shape[2] == 1 and img.dtype in [np.float, np.float32, np.float64]: # single channel
         n = img / max(np.percentile(img, 95), 1e-6)
         if norm == 'color':
             # [small value of img, large value of img] -> [blue, red]
@@ -53,7 +53,8 @@ def query_nK(cat):
     nfx, nfy = f/W, f/H
     ncx, ncy = (cx+0.5)/W, (cy+0.5)/H
     nK = np.array([[nfx, 0, ncx], [0, nfy, ncy], [0, 0, 1]], dtype=np.float32)
-    return nK, baseline
+
+    return nK, np.float32(baseline)
 
 
 def unnormalize_K(nK, size):

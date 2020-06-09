@@ -2,8 +2,15 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer, Input
 import numpy as np
 import cv2
-from opt_helper import opt
-import utils
+try:
+    from opt_helper import opt
+    import utils
+except:
+    import os
+    import sys
+    sys.path.insert(1, os.path.join(sys.path[0], '..'))
+    from opt_helper import opt
+    import utils
 
 class PopulatePointCloud(Layer):
     def __init__(self, *args, **kwargs):
@@ -221,3 +228,30 @@ def get_minimap(tmap, zn, cte, ye, ppm=20):
     cv2.line(mm, _l2m(pt0), _l2m(pt1), (0,255,0), thickness=1)
     return mm
 
+
+if __name__ == '__main__':
+    from pathlib import Path
+    from estimate import populate_pc
+    import time
+
+    nK, baseline = utils.query_nK('victech')
+    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+    depth_files = sorted(Path(data_dir/'depthL').glob('*.pfm'), key=lambda v: int(v.stem))
+
+    for f in depth_files:
+        depth = utils.imread(str(f))
+        pc = populate_pc(depth, nK, flatten=False)
+
+        t0 = time.time()
+        gmap = gen_grid_map(pc, nK)
+        test_path(gmap)
+        t1 = time.time()
+        print("* ", f.stem, ": elspaed", t1 - t0)
+
+        gmap_show = np.copy(gmap[:,:,0])
+        gmap_show = 0.5 * (gmap_show + 1)
+        gmap_show[gmap[:,:,1] > 0] = 0
+        gmap_show = (gmap_show * 255).astype(np.uint8)
+        gmap_show = cv2.cvtColor(gmap_show, cv2.COLOR_GRAY2RGB)
+        if utils.imshow(gmap_show, name='gmap', wait=True) == 27:
+            break

@@ -15,26 +15,6 @@ import utils
 
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
-def predict_disp(model, imgnameL, imgnameR):
-    imgL = utils.imread(imgnameL)
-    imgR = utils.imread(imgnameR)
-    height, width = imgL.shape[:2] # original height, width
-
-    # denoising?
-    # imgL = cv2.blur(imgL, ksize=(3,3))
-    # imgR = cv2.blur(imgR, ksize=(3,3))
-    # imgL = cv2.fastNlMeansDenoisingColored(imgL, None, 10, 10, 7, 21)
-    # imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 21)
-    # imgL = cv2.bilateralFilter(imgL, 11, 17, 17)
-    # imgR = cv2.bilateralFilter(imgR, 11, 17, 17)
-
-    # session run
-    imgL_fit, imgR_fit = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
-    dispL, _ = model([imgL_fit[None], imgR_fit[None]])
-    dispL = np.squeeze(dispL) # [h, w]
-    dispL = width * cv2.resize(dispL, (width, height))
-    return imgL, dispL
-
 
 def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     imgL = utils.imread(imgnameL)
@@ -132,7 +112,7 @@ if __name__ == '__main__':
     autoflags()
     opt.trace = '' # this should be empty because we have no output when testing
     opt.batch_size = 1
-    opt.pretrained_model = '.results_stereosv/weights-log.h5'
+    opt.pretrained_model = '.results_stereosv/weights-067.h5'
 
     print('* Restoring model')
     disp_net = DispNet('test')
@@ -141,7 +121,7 @@ if __name__ == '__main__':
     tf_pred = tf.function(functools.partial(tmap_dec.call, training=False))
 
     ''' point cloud test of office image of inbo.yeo '''
-    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
+    data_dir = Path('M:\\Users\\sehee\\camera_taker_200608\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
     def ns_feeder(index):
         imgnameL = imgnamesL[index % len(imgnamesL)]
@@ -149,23 +129,20 @@ if __name__ == '__main__':
         img, depth, nK = predict_tmap(tf_pred, str(imgnameL), str(imgnameR))
         return img, np.clip(depth, 0, 30), nK
 
-    ''' generate disparity map prediction '''
+    ''' generate depth map prediction '''
+    # nK, baseline = utils.query_nK('victech')
+    # baseline = np.array(baseline, np.float32)
     # for imgnameL in tqdm(imgnamesL):
     #     imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-    #     _, disp = predict_disp(disp_net, str(imgnameL), str(imgnameR))
-    #     outpath = (data_dir/'dispL'/imgnameL.stem).with_suffix('.pfm')
+    #     imgL = utils.imread(str(imgnameL))
+    #     imgR = utils.imread(str(imgnameR))
+    #     imgL, imgR = utils.resize_image_pairs(imgL, imgR, (opt.img_width, opt.img_height), np.float32)
+    #     depth, _ = tf_pred([imgL[None], imgR[None], nK[None], baseline[None]])
+    #     depth = np.squeeze(depth.numpy())
+    #     outpath = (data_dir/'depthL'/imgnameL.stem).with_suffix('.pfm')
     #     outpath.parent.mkdir(parents=True, exist_ok=True)
-    #     write_pfm(str(outpath), disp)
+    #     cv2.imwrite(str(outpath), depth)
     # exit()
-
-    ''' point cloud test of office image of kimys '''
-    # data_dir = Path('M:\\Users\\sehee\\StereoCapture_200316_1400\\seq1')
-    # imgnamesL = list(Path(data_dir).glob('*_L.jpg'))
-    # def ns_feeder(index):
-    #     imgnameL = imgnamesL[index % len(imgnamesL)]
-    #     imgnameR = (data_dir/imgnameL.stem.replace('_L', '_R')).with_suffix('.jpg')
-    #     img, depth, K = predict_depth_vicimg(disp_net, str(imgnameL), str(imgnameR))
-    #     return img, np.clip(depth, 0, 30), K
 
     ''' point cloud test of dexter data '''
     # #data_dir = Path('M:\\datasets\\dexter\\arch1_913')
