@@ -28,8 +28,14 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
 
     # calculate cte/ye
     t0 = time.time()
-    p_abs, depth = tf_pred([imgL_fit[None], imgR_fit[None], nK[None], baseline[None]])
-    depth = np.squeeze(depth)
+    outputs = tf_pred([imgL_fit[None], imgR_fit[None], nK[None], baseline[None]])
+    if isinstance(outputs, (list, tuple)) and len(outputs) == 2:
+        p_abs, depth = outputs
+        depth = np.squeeze(depth)
+        depth = cv2.resize(np.squeeze(depth), (width, height))    
+    else:
+        p_abs = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
+        depth = None
     p_abs = np.squeeze(p_abs)
     gmap, eoa = generate_gmap(p_abs, nK)
     cte, ye = get_visual_odometry(gmap)
@@ -40,7 +46,6 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     minimap = get_minimap(gmap, cte, ye)
     utils.imshow(minimap, wait=False)
 
-    depth = cv2.resize(np.squeeze(depth), (width, height))    
     return imgL, depth, nK
 
 def export_to_frozen_saved_model():
@@ -57,26 +62,27 @@ def export_to_frozen_saved_model():
     print('* Restoring model')
     disp_net = DispNet('test')
     disp_net.model.load_weights(opt.pretrained_model)
-    tf_pred = tf.function(functools.partial(tmap_decoder(disp_net).call, training=False))
-    tf_pred_concrete = tf_pred.get_concrete_function(
+    pred_model = tmap_decoder(disp_net, with_depth=False)
+    pred_fn = tf.function(functools.partial(pred_model.call, training=False))
+    pred_fn_concrete = pred_fn.get_concrete_function(
         (tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imL"),
         tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imR"),
-        tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="K"),
+        tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="nK"),
         tf.TensorSpec(shape=(1,), dtype=tf.float32, name="baseline")))
 
-    tf_pred_frozen = convert_variables_to_constants_v2(tf_pred_concrete)
-    tf.saved_model.save(tmap_dec, './frozen_models', signatures=tf_pred_frozen)
+    pred_fn_frozen = convert_variables_to_constants_v2(pred_fn_concrete)
+    tf.saved_model.save(pred_model, './frozen_models', signatures=pred_fn_frozen)
 
-    tf_pred_loaded = tf.saved_model.load('./frozen_models')
-    print(list(tf_pred_loaded.signatures.keys()))  # ["serving_default"]
-    tf_pred_loaded = tf_pred_loaded.signatures["serving_default"]
+    pred_model_reloaded = tf.saved_model.load('./frozen_models')
+    print(list(pred_model_reloaded.signatures.keys()))  # ["serving_default"]
+    pred_model_reloaded = pred_model_reloaded.signatures["serving_default"]
 
     # To see saved signature
     #saved_model_cli show --dir .results_stereosv/fullmodel-tf2  --tag_set serve --signature_def serving_default
     def infer(i):
-        output = tf_pred_loaded(imL=i[0], imR=i[1], K=i[2], baseline=i[3])
-        return output['output_0'], output['output_1']
-    tf_pred_loaded_wrapped = tf.function(infer)
+        output = pred_model_reloaded(imL=i[0], imR=i[1], nK=i[2], baseline=i[3])
+        return output['output_0']
+    pred_fn_reloaded = tf.function(infer)
 
     # To print all layers
     # layers = [op.name for op in tf_pred_frozen.graph.get_operations()]
@@ -95,9 +101,12 @@ def export_to_frozen_saved_model():
     # Test prediction
     data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
-    imgnameL = imgnamesL[10 % len(imgnamesL)]
-    imgnameR = (data_dir/'imR'/imgnameL.stem).with_suffix('.png')
-    img, depth, nK = predict_tmap(tf_pred_loaded_wrapped, str(imgnameL), str(imgnameR))
+    for imgL_path in imgnamesL:
+        imgR_path = (data_dir/'imR'/imgL_path.stem).with_suffix('.png')
+        img, depth, nK = predict_tmap(pred_fn_reloaded, str(imgL_path), str(imgR_path))
+        if cv2.waitKey(0) == 27:
+            break
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     from estimate.vis import NavScene
@@ -113,8 +122,8 @@ if __name__ == '__main__':
     pred_model = tmap_decoder(disp_net, with_depth=True)
     tf_pred = tf.function(functools.partial(pred_model.call, training=False))
 
-    ''' point cloud test of office image of inbo.yeo '''
-    data_dir = Path('M:\\Users\\sehee\\camera_taker_200608\\undist_fisheye')
+    ''' point cloud test of office image '''
+    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
     imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
     def ns_feeder(index):
         imgnameL = imgnamesL[index % len(imgnamesL)]
