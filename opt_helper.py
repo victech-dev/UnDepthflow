@@ -8,7 +8,7 @@ opt = flags.FLAGS
 
 flags.DEFINE_string('trace', 'AUTO', 'directory for model checkpoints.')
 flags.DEFINE_integer('num_iterations', 1000000, 'number of training iterations.')
-flags.DEFINE_list('pretrained_model', [], 'filepath of a pretrained model to initialize from.')
+flags.DEFINE_string('pretrained_model', '', 'filepath of a pretrained model to initialize from.')
 flags.DEFINE_boolean("retrain", True, "whether to reset the iteration counter")
 
 flags.DEFINE_string('data_dir', '', 'root filepath of data.')

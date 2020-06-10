@@ -4,3 +4,4 @@ __pycache__/
 .pretrained*/
 *.ps1
 .archive/
+.frozen_models/
