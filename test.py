@@ -49,66 +49,6 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech', show_minimap=True):
 
     return imgL, depth, nK
 
-def export_to_frozen_saved_model():
-    # Workaround for 'TensorFlow Failed to get convolution algorithm'
-    # https://medium.com/@JeansPantRushi/fix-for-tensorflow-v2-failed-to-get-convolution-algorithm-b367a088b56e
-    physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
-    autoflags()
-    opt.trace = '' # this should be empty because we have no output when testing
-    opt.batch_size = 1
-    opt.pretrained_model = '.results_stereosv/weights-log.h5'
-
-    print('* Restoring model')
-    disp_net = DispNet('test')
-    disp_net.model.load_weights(opt.pretrained_model)
-    pred_model = tmap_decoder(disp_net, with_depth=False)
-    pred_fn = tf.function(functools.partial(pred_model.call, training=False))
-    pred_fn_concrete = pred_fn.get_concrete_function(
-        (tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="iml"),
-        tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imr"),
-        tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="nk"),
-        tf.TensorSpec(shape=(1,), dtype=tf.float32, name="baseline")))
-
-    pred_fn_frozen = convert_variables_to_constants_v2(pred_fn_concrete)
-    tf.saved_model.save(pred_model, './frozen_models', signatures=pred_fn_frozen)
-
-    pred_model_reloaded = tf.saved_model.load('./frozen_models')
-    print(list(pred_model_reloaded.signatures.keys()))  # ["serving_default"]
-    pred_model_reloaded = pred_model_reloaded.signatures["serving_default"]
-
-    # To see saved signature
-    #saved_model_cli show --dir .results_stereosv/fullmodel-tf2  --tag_set serve --signature_def serving_default
-    def infer(i):
-        output = pred_model_reloaded(imL=i[0], imR=i[1], nK=i[2], baseline=i[3])
-        return output['output_0']
-    pred_fn_reloaded = tf.function(infer)
-
-    # To print all layers
-    # layers = [op.name for op in tf_pred_frozen.graph.get_operations()]
-    # print("-" * 50)
-    # print("Frozen model layers: ")
-    # for layer in layers:
-    #     print(layer)
-
-    # To print inputs/outputs
-    # print("-" * 50)
-    # print("Frozen model inputs: ")
-    # print(tf_pred_frozen.inputs)
-    # print("Frozen model outputs: ")
-    # print(tf_pred_frozen.outputs)
-
-    # Test prediction
-    data_dir = Path('M:\\Users\\sehee\\camera_taker\\undist_fisheye')
-    imgnamesL = sorted(Path(data_dir/'imL').glob('*.png'), key=lambda v: int(v.stem))
-    for imgL_path in imgnamesL:
-        imgR_path = (data_dir/'imR'/imgL_path.stem).with_suffix('.png')
-        img, depth, nK = predict_tmap(pred_fn_reloaded, str(imgL_path), str(imgR_path))
-        if cv2.waitKey(0) == 27:
-            break
-    cv2.destroyAllWindows()
-
 if __name__ == '__main__':
     from estimate.vis import NavScene
 
