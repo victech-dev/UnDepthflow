@@ -9,31 +9,28 @@ import utils
 class PopulatePointCloud(Layer):
     def __init__(self, *args, **kwargs):
         super(PopulatePointCloud, self).__init__(*args, **kwargs)
-        self._grid = None
-        self._H = 0
-        self._W = 0
 
     def build(self, input_shape):
         depth_shape = input_shape[0]
-        self._H, self._W = depth_shape[1:3]
-        gx, gy = np.meshgrid(np.arange(self._W), np.arange(self._H))
+        H, W = depth_shape[1:3]
+        gx, gy = np.meshgrid(np.arange(W), np.arange(H))
         grid = np.stack([gx, gy, np.ones_like(gx)], axis=-1)[None]
         grid = grid.astype(np.float32)
         init_grid = tf.constant_initializer(grid)
-        self._grid = self.add_weight(shape=(1, self._H, self._W, 3), initializer=init_grid, trainable=False)
+        self.gridbase = self.add_weight('gridbase', shape=(1, H, W, 3), initializer=init_grid, trainable=False)
 
     def call(self, inputs):
         depth, nK = inputs
 
         # convert nK(= normalized K) to inv_K
-        H, W = self._H, self._W
+        H, W = depth.shape[1:3]
         iH, iW = 1/H, 1/W
         infx, ncx = 1/nK[:,0,0], nK[:,0,2]
         infy, ncy = 1/nK[:,1,1], nK[:,1,2]
         iK00, iK02 = iW*infx, infx*(0.5*iW - ncx)
         iK11, iK12 = iH*infy, infy*(0.5*iH - ncy)
 
-        xyz = depth * self._grid
+        xyz = depth * self.gridbase
         x, y, z = tf.unstack(xyz, axis=-1)
         tx = iK00[:,None,None] * x + iK02[:,None,None] * z
         ty = iK11[:,None,None] * y + iK12[:,None,None] * z
