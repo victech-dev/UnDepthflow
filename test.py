@@ -37,10 +37,10 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech', show_minimap=True):
         p_abs = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
         depth = None
     p_abs = np.squeeze(p_abs)
-    gmap, eoa = generate_gmap(p_abs, nK)
+    gmap = generate_gmap(p_abs, nK)
     cte, ye = get_visual_odometry(gmap)
     t1 = time.time()
-    print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye, "eoa:", eoa)
+    print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye)
 
     # display minimap
     if show_minimap:

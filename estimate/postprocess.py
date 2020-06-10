@@ -93,10 +93,6 @@ def generate_gmap(p_abs, nK):
     fx, cx = nK[0,0] * W, nK[0,2] * W - 0.5
     p_arg = 0.5 * np.pi - np.arctan((np.arange(W, dtype=np.float32) - cx) / fx)
 
-    # test end of aisle
-    u_center = int(np.round(cx))
-    eoa = np.all(p_abs[u_center-1:u_center+2] < 1.2)
-
     # prepare gmap (open space)
     ppm = 20
     range_x, range_z = 4, 5
@@ -117,7 +113,7 @@ def generate_gmap(p_abs, nK):
     _, gmap, _, _ = cv2.floodFill(gmap, None, (0,0), 255) # fill occ/unknown
     gmap = 255 - gmap[1:-1,1:-1]
 
-    return (gmap / 255).astype(np.float32), eoa
+    return (gmap / 255).astype(np.float32)
 
 
 def get_visual_odometry(gmap, max_angle=30, search_range=(2, 2), passage_width=1.5, ppm=20):
