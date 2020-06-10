@@ -168,7 +168,34 @@ def predict_test_images(saved_model_path, predict_count):
     for _ in range(predict_count):
         img, depth, nK = predict_tmap(pred_fn_loaded, str(imgnameL), str(imgnameR), show_minimap=False)
 
+import json
+import requests
+
+def predict_test_images_with_model_server(predict_count):
+    def infer(i):
+        data = json.dumps({
+            "signature_name": "predict",
+            "instances": [i]
+            #"instances": test_images[0:3].tolist()
+        })
+
+        # headers for the post request
+        headers = {"content-type": "application/json"}
+
+        # make the post request 
+        json_response = requests.post('http://localhost:8501/v1/models/stereosv/versions/1:predict',
+            data=data,
+            headers=headers)
+
+        print(json_reponse)
+        #output = pred_model_loaded(iml=i[0], imr=i[1], nk=i[2], baseline=i[3])
+        return output['output_0']
+    pred_fn_loaded = tf.function(infer)
+
 if __name__ == '__main__':
+    predict_test_images_with_model_server(5)
+
+if __name__ == '!__main__':
     # Workaround for 'TensorFlow Failed to get convolution algorithm'
     # https://medium.com/@JeansPantRushi/fix-for-tensorflow-v2-failed-to-get-convolution-algorithm-b367a088b56e
     is_low_end_gpu = False
