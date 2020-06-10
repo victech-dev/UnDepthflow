@@ -65,9 +65,9 @@ def export_to_frozen_saved_model():
     pred_model = tmap_decoder(disp_net, with_depth=False)
     pred_fn = tf.function(functools.partial(pred_model.call, training=False))
     pred_fn_concrete = pred_fn.get_concrete_function(
-        (tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imL"),
-        tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imR"),
-        tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="nK"),
+        (tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="iml"),
+        tf.TensorSpec(shape=(1, 384, 512, 3), dtype=tf.float32, name="imr"),
+        tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32, name="nk"),
         tf.TensorSpec(shape=(1,), dtype=tf.float32, name="baseline")))
 
     pred_fn_frozen = convert_variables_to_constants_v2(pred_fn_concrete)
