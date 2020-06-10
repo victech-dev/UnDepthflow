@@ -21,14 +21,14 @@ def dense_image_uwarp(image, uflow, name=None):
             row_offsets = row_offsets[None,:,None] # would broadcast to [B,H,W]
             flattened_img = tf.reshape(image, (-1, C))
 
-            def gather_with_zero_padding(col, name):
+            def gather(col, name):
                 with tf.name_scope('gather_' + name):
                     linear_coordinates = batch_offsets + row_offsets + col
                     gathered_values = tf.gather(flattened_img, linear_coordinates)
                     return gathered_values
 
-            left = gather_with_zero_padding(x0c, 'left')
-            right = gather_with_zero_padding(x1c, 'right')
+            left = gather(x0c, 'left')
+            right = gather(x1c, 'right')
 
             # now, do the actual interpolation
             # this is not bilinear, just linear interpolation on single scan line
