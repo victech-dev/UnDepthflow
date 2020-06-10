@@ -7,7 +7,7 @@ def inv_warp_flow_x(image, flowx, name='inv_warp_flowx'):
     with tf.name_scope(name):
         B, H, W, C = tf.unstack(tf.shape(image))
         # flow -> target grid
-        gx = tf.range(W, dtype=tf.float32) 
+        gx = tf.cast(tf.range(W), tf.float32) 
         gx = gx[None,None,:,None] + flowx
         gx = tf.squeeze(gx, axis=-1)
 
