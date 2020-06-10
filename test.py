@@ -16,7 +16,7 @@ import utils
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
 
-def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
+def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech', show_minimap=True):
     imgL = utils.imread(imgnameL)
     imgR = utils.imread(imgnameR)
     height, width = imgL.shape[:2] # original height, width
@@ -43,8 +43,9 @@ def predict_tmap(tf_pred, imgnameL, imgnameR, cat='victech'):
     print("*", Path(imgnameL).stem, "elspaed:", t1 - t0, "cte:", cte, "ye:", ye, "eoa:", eoa)
 
     # display minimap
-    minimap = get_minimap(gmap, cte, ye)
-    utils.imshow(minimap, wait=False)
+    if show_minimap:
+        minimap = get_minimap(gmap, cte, ye)
+        utils.imshow(minimap, wait=False)
 
     return imgL, depth, nK
 
