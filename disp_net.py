@@ -5,7 +5,7 @@ import functools
 
 from opt_helper import opt
 from losses import charbonnier_loss
-from core_warp import inv_warp_flow_x
+from core_warp import inv_warp_uflow
 
 _reg = tf.keras.regularizers.l2(opt.weight_decay)
 
@@ -122,7 +122,7 @@ class PwcNet_Single(Layer):
 
         flow6to5 = self._upsampling_x2(flow6)
         feat6to5 = self._upsampling_x2(feat6)
-        feature2_5w = inv_warp_flow_x(feature2_5, 0.625 * flow6to5)
+        feature2_5w = inv_warp_uflow(feature2_5, 0.625 * flow6to5)
         cv5 = self._cost_volumn(feature1_5, feature2_5w, d=4)
         flow5, feat5 = self._dec5(tf.concat([cv5, feature1_5, feat6to5, flow6to5], axis=3))
         flow5 = flow5 + flow6to5
@@ -130,7 +130,7 @@ class PwcNet_Single(Layer):
 
         flow5to4 = self._upsampling_x2(flow5)
         feat5to4 = self._upsampling_x2(feat5)
-        feature2_4w = inv_warp_flow_x(feature2_4, 1.25 * flow5to4)
+        feature2_4w = inv_warp_uflow(feature2_4, 1.25 * flow5to4)
         cv4 = self._cost_volumn(feature1_4, feature2_4w, d=4)
         flow4, feat4 = self._dec4(tf.concat([cv4, feature1_4, feat5to4, flow5to4], axis=3))
         flow4 = flow4 + flow5to4
@@ -138,7 +138,7 @@ class PwcNet_Single(Layer):
 
         flow4to3 = self._upsampling_x2(flow4)
         feat4to3 = self._upsampling_x2(feat4)
-        feature2_3w = inv_warp_flow_x(feature2_3, 2.5 * flow4to3)
+        feature2_3w = inv_warp_uflow(feature2_3, 2.5 * flow4to3)
         cv3 = self._cost_volumn(feature1_3, feature2_3w, d=4)
         flow3, feat3 = self._dec3(tf.concat([cv3, feature1_3, feat4to3, flow4to3], axis=3))
         flow3 = flow3 + flow4to3
@@ -146,7 +146,7 @@ class PwcNet_Single(Layer):
 
         flow3to2 = self._upsampling_x2(flow3)
         feat3to2 = self._upsampling_x2(feat3)
-        feature2_2w = inv_warp_flow_x(feature2_2, 5 * flow3to2)
+        feature2_2w = inv_warp_uflow(feature2_2, 5 * flow3to2)
         cv2 = self._cost_volumn(feature1_2, feature2_2w, d=4)
         flow2_raw, feat2 = self._dec2(tf.concat([cv2, feature1_2, feat3to2, flow3to2], axis=3))
         flow2_raw = flow2_raw + flow3to2

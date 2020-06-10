@@ -1,12 +1,20 @@
+import tensorflow as tf
 try:
     from core_warp import dense_image_warp
 except:
     from dense_image_warp import dense_image_warp
 
 
-def inv_warp_flow(image, flow):
-    # TODO padding mode like grid_sample of pytorch
-    return dense_image_warp(image, -flow)
+def inv_warp_flow(image, flow, padding='zeros'):
+    if padding == 'border':
+        return dense_image_warp(image, -flow)
+    elif padding == 'zeros':
+        image_pad = tf.pad(image, [[0,0], [1,1], [1,1], [0,0]])
+        flow_pad = tf.pad(flow, [[0,0], [1,1], [1,1], [0,0]])
+        w = dense_image_warp(image_pad, -flow_pad)
+        return w[:,1:-1,1:-1]
+    else:
+        raise ValueError('Not supported padding type')
 
 
 if __name__ == '__main__':
