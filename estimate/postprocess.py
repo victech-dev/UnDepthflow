@@ -113,7 +113,7 @@ def generate_gmap(p_abs, nK):
     cv2.line(gmap, ((gW-1)//2, gH-1), tuple(gpos_clip[-1]), 255, thickness=1)
 
     # fill outside / inverse
-    gmap = np.pad(gmap, ((1,1), (1,1)))
+    gmap = np.pad(gmap, ((1,1), (1,1)), mode='constant')
     _, gmap, _, _ = cv2.floodFill(gmap, None, (0,0), 255) # fill occ/unknown
     gmap = 255 - gmap[1:-1,1:-1]
 
